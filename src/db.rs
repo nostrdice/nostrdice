@@ -28,3 +28,18 @@ pub fn get_zap(db: &Db, payment_hash: String) -> anyhow::Result<Option<Zap>> {
         None => Ok(None),
     }
 }
+
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DiceRoll {
+    pub roll: u16,
+    pub nonce: u64,
+    pub event_id: String,
+}
+
+pub fn upsert_dice_roll(db: &Db, dice_roll: DiceRoll) -> anyhow::Result<()> {
+    let value = serde_json::to_vec(&dice_roll)?;
+    db.insert(dice_roll.event_id.as_bytes(), value)?;
+
+    Ok(())
+}

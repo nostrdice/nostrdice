@@ -17,6 +17,7 @@ use tonic_openssl_lnd::LndLightningClient;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::*;
+use crate::dice::start_rounds;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
 
@@ -24,6 +25,7 @@ mod config;
 mod db;
 mod routes;
 mod subscriber;
+mod dice;
 
 #[derive(Clone)]
 pub struct State {
@@ -109,8 +111,10 @@ async fn main() -> anyhow::Result<()> {
     spawn(start_invoice_subscription(
         state.db.clone(),
         state.lnd.clone(),
-        keys,
+        keys.clone(),
     ));
+
+    spawn(start_rounds(state.db.clone(), keys));
 
     let graceful = server.with_graceful_shutdown(async {
         tokio::signal::ctrl_c()
