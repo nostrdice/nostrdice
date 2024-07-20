@@ -31,7 +31,9 @@ pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
         hasher.update(nonce.to_le_bytes());
         let commitment = hasher.finalize();
 
-        let event = EventBuilder::text_note(format!("What is it gonna be? {}!", hex::encode(commitment)), [Tag::Sha256(sha256::Hash::hash(&commitment))]).to_event(&keys)?;
+        let commitment = sha256::Hash::hash(&commitment);
+
+        let event = EventBuilder::text_note(format!("What is it gonna be? {}", commitment), [Tag::Sha256(commitment)]).to_event(&keys)?;
 
         // Create new client
         let client = Client::new(&keys);
