@@ -7,6 +7,7 @@ use sled::Db;
 pub struct Zap {
     pub invoice: Bolt11Invoice,
     pub request: Event,
+    // is some if the invoice was paid.
     pub note_id: Option<String>,
 }
 
