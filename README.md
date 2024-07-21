@@ -1,2 +1,1 @@
 # nostr-dice
-

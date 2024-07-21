@@ -1,16 +1,21 @@
-use crate::db::{get_zap, upsert_zap};
+use crate::db::get_zap;
+use crate::db::upsert_zap;
 use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
-use lightning_invoice::{Currency, InvoiceBuilder, PaymentSecret};
+use lightning_invoice::Currency;
+use lightning_invoice::InvoiceBuilder;
+use lightning_invoice::PaymentSecret;
 use nostr::prelude::ToBech32;
-use nostr::{EventBuilder, Keys};
+use nostr::EventBuilder;
+use nostr::Keys;
 use nostr_sdk::Client;
 use sled::Db;
 use std::time::Duration;
+use tonic_openssl_lnd::lnrpc;
 use tonic_openssl_lnd::lnrpc::invoice::InvoiceState;
-use tonic_openssl_lnd::{lnrpc, LndLightningClient};
+use tonic_openssl_lnd::LndLightningClient;
 
 pub const RELAYS: [&str; 8] = [
     "wss://nostr.mutinywallet.com",
@@ -25,7 +30,7 @@ pub const RELAYS: [&str; 8] = [
 
 pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key: Keys) {
     loop {
-        println!("Starting invoice subscription");
+        tracing::info!("Starting invoice subscription");
 
         let sub = lnrpc::InvoiceSubscription::default();
         let mut invoice_stream = lnd
@@ -49,13 +54,13 @@ pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key
 
                         match tokio::time::timeout(Duration::from_secs(30), fut).await {
                             Ok(Ok(_)) => {
-                                println!("Handled paid invoice!");
+                                tracing::info!("Handled paid invoice!");
                             }
                             Ok(Err(e)) => {
-                                eprintln!("Failed to handle paid invoice: {}", e);
+                                tracing::error!("Failed to handle paid invoice: {}", e);
                             }
                             Err(_) => {
-                                eprintln!("Timeout");
+                                tracing::error!("Timeout");
                             }
                         }
                     });
@@ -116,7 +121,7 @@ async fn handle_paid_invoice(db: &Db, payment_hash: String, keys: Keys) -> anyho
             let event_id = client.send_event(event).await?;
             let _ = client.disconnect().await;
 
-            println!(
+            tracing::info!(
                 "Broadcasted event id: {}!",
                 event_id.to_bech32().expect("bech32")
             );
