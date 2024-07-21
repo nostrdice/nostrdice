@@ -1,22 +1,28 @@
-use std::time::Duration;
+use crate::db;
+use crate::db::DiceRoll;
 use anyhow::Result;
 use bitcoin::hashes::sha256;
 use bitcoin::secp256k1::rand;
-use nostr::{EventBuilder, Keys, Marker, Tag, ToBech32};
 use nostr::hashes::Hash;
+use nostr::EventBuilder;
+use nostr::Keys;
+use nostr::Marker;
+use nostr::Tag;
+use nostr::ToBech32;
 use nostr_sdk::Client;
 use rand::Rng;
-use sled::Db;
-use tokio::time::sleep;
-use sha2::Sha256;
 use sha2::Digest;
-use crate::db;
-use crate::db::DiceRoll;
+use sha2::Sha256;
+use sled::Db;
+use std::time::Duration;
+use tokio::time::sleep;
 
 // a new round every five minutes
-const ROUND_TIMEOUT: Duration = Duration::from_secs(60*5);
+const ROUND_TIMEOUT: Duration = Duration::from_secs(60 * 5);
 
-const MULTIPLIERS: [&str; 11] = ["1.05x", "1.1x", "1.33x", "1.5x", "2x", "3x", "10x", "25x", "50x", "100x", "1000x"];
+const MULTIPLIERS: [&str; 11] = [
+    "1.05x", "1.1x", "1.33x", "1.5x", "2x", "3x", "10x", "25x", "50x", "100x", "1000x",
+];
 
 pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
     loop {
@@ -35,7 +41,11 @@ pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
 
         let commitment = sha256::Hash::hash(&commitment);
 
-        let event = EventBuilder::text_note(format!("What is it gonna be? {}", commitment), [Tag::Sha256(commitment)]).to_event(&keys)?;
+        let event = EventBuilder::text_note(
+            format!("What is it gonna be? {}", commitment),
+            [Tag::Sha256(commitment)],
+        )
+        .to_event(&keys)?;
 
         // Create new client
         let client = Client::new(&keys);
@@ -43,10 +53,8 @@ pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
         client.connect().await;
 
         let event_id = client.send_event(event.clone()).await?;
-        let note_id= event.id.to_bech32().expect("bech32");
-        println!(
-            "Broadcasted event id: {note_id}!",
-        );
+        let note_id = event.id.to_bech32().expect("bech32");
+        println!("Broadcasted event id: {note_id}!",);
 
         let dice_roll = DiceRoll {
             roll,
@@ -63,7 +71,11 @@ pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
         };
 
         for multiplier in MULTIPLIERS {
-            let event = EventBuilder::text_note(format!("{multiplier} nostr:{note_id}"), [mention_event.clone()]).to_event(&keys)?;
+            let event = EventBuilder::text_note(
+                format!("{multiplier} nostr:{note_id}"),
+                [mention_event.clone()],
+            )
+            .to_event(&keys)?;
             let event_id = client.send_event(event).await?;
             println!(
                 "Broadcasted event id: {}!",

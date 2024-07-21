@@ -1,0 +1,25 @@
+{
+  "projectType": "openSource",
+  "incremental": true,
+  "markdown": {},
+  "includes": [
+    "**/*.{rs,md,yml,yaml}"
+  ],
+  "excludes": [
+    "**/target"
+  ],
+  "exec": {
+    "commands": [
+      {
+        "command": "rustfmt +nightly",
+        "exts": [
+          "rs"
+        ]
+      }
+    ]
+  },
+  "plugins": [
+    "https://plugins.dprint.dev/markdown-0.15.3.wasm",
+    "https://plugins.dprint.dev/exec-0.4.3.json@42343548b8022c99b1d750be6b894fe6b6c7ee25f72ae9f9082226dd2e515072",
+  ]
+}

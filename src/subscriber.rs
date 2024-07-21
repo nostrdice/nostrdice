@@ -1,16 +1,21 @@
-use crate::db::{get_zap, upsert_zap};
+use crate::db::get_zap;
+use crate::db::upsert_zap;
 use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
-use lightning_invoice::{Currency, InvoiceBuilder, PaymentSecret};
+use lightning_invoice::Currency;
+use lightning_invoice::InvoiceBuilder;
+use lightning_invoice::PaymentSecret;
 use nostr::prelude::ToBech32;
-use nostr::{EventBuilder, Keys};
+use nostr::EventBuilder;
+use nostr::Keys;
 use nostr_sdk::Client;
 use sled::Db;
 use std::time::Duration;
+use tonic_openssl_lnd::lnrpc;
 use tonic_openssl_lnd::lnrpc::invoice::InvoiceState;
-use tonic_openssl_lnd::{lnrpc, LndLightningClient};
+use tonic_openssl_lnd::LndLightningClient;
 
 pub const RELAYS: [&str; 8] = [
     "wss://nostr.mutinywallet.com",

@@ -1,31 +1,38 @@
-use std::fs::File;
-use std::io::{BufReader, Write};
-use std::path::PathBuf;
-
-use axum::http::{Method, StatusCode, Uri};
-use axum::routing::get;
-use axum::{http, Extension, Router};
-use clap::Parser;
-use nostr::prelude::ToBech32;
-use nostr::Keys;
-use serde::{Deserialize, Serialize};
-use serde_json::{from_reader, to_string};
-use sled::Db;
-use tokio::spawn;
-use tonic_openssl_lnd::lnrpc::{GetInfoRequest, GetInfoResponse};
-use tonic_openssl_lnd::LndLightningClient;
-use tower_http::cors::{Any, CorsLayer};
-
 use crate::config::*;
 use crate::dice::start_rounds;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
+use axum::http;
+use axum::http::Method;
+use axum::http::StatusCode;
+use axum::http::Uri;
+use axum::routing::get;
+use axum::Extension;
+use axum::Router;
+use clap::Parser;
+use nostr::prelude::ToBech32;
+use nostr::Keys;
+use serde::Deserialize;
+use serde::Serialize;
+use serde_json::from_reader;
+use serde_json::to_string;
+use sled::Db;
+use std::fs::File;
+use std::io::BufReader;
+use std::io::Write;
+use std::path::PathBuf;
+use tokio::spawn;
+use tonic_openssl_lnd::lnrpc::GetInfoRequest;
+use tonic_openssl_lnd::lnrpc::GetInfoResponse;
+use tonic_openssl_lnd::LndLightningClient;
+use tower_http::cors::Any;
+use tower_http::cors::CorsLayer;
 
 mod config;
 mod db;
+mod dice;
 mod routes;
 mod subscriber;
-mod dice;
 
 #[derive(Clone)]
 pub struct State {

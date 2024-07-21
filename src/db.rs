@@ -1,6 +1,7 @@
 use lightning_invoice::Bolt11Invoice;
 use nostr::Event;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use sled::Db;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +30,6 @@ pub fn get_zap(db: &Db, payment_hash: String) -> anyhow::Result<Option<Zap>> {
         None => Ok(None),
     }
 }
-
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DiceRoll {
