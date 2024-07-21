@@ -32,9 +32,9 @@ use tracing::level_filters::LevelFilter;
 mod config;
 mod db;
 mod dice;
+mod logger;
 mod routes;
 mod subscriber;
-mod logger;
 
 #[derive(Clone)]
 pub struct State {
@@ -47,7 +47,6 @@ pub struct State {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
     logger::init_tracing(LevelFilter::DEBUG, false)?;
 
     let config: Config = Config::parse();

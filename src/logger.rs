@@ -23,7 +23,6 @@ pub fn init_tracing(level: LevelFilter, json_format: bool) -> Result<()> {
         .add_directive(Directive::from(level))
         .add_directive("sled=warn".parse()?);
 
-
     // Parse additional log directives from env variable
     let filter = match std::env::var_os(RUST_LOG_ENV).map(|s| s.into_string()) {
         Some(Ok(env)) => {

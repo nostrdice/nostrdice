@@ -2,6 +2,7 @@ use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
 use anyhow::anyhow;
+use anyhow::Context;
 use axum::extract::Path;
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -13,6 +14,7 @@ use bitcoin::secp256k1::ThirtyTwoByteHash;
 use lightning_invoice::Bolt11Invoice;
 use lnurl::pay::PayResponse;
 use lnurl::Tag;
+use nostr::event;
 use nostr::Event;
 use nostr::JsonUtil;
 use serde_json::json;
@@ -51,10 +53,21 @@ pub(crate) async fn get_invoice_impl(
 
     if let Some(zap_request) = zap_request {
         let invoice = Bolt11Invoice::from_str(&resp.payment_request)?;
+        let tags = zap_request.tags();
+        let maybe_tag_id = tags
+            .into_iter()
+            .filter_map(|tag| match tag {
+                event::Tag::Event { event_id, .. } => Some(*event_id),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            // first is ok here, because there should only be one event (if any)
+            .first();
+
         let zap = Zap {
             invoice,
             request: zap_request,
-            note_id: None,
+            note_id: maybe_tag_id.map(|e| e.to_hex()),
         };
         upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
     }
