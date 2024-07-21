@@ -30,7 +30,7 @@ pub const RELAYS: [&str; 8] = [
 
 pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key: Keys) {
     loop {
-        println!("Starting invoice subscription");
+        tracing::info!("Starting invoice subscription");
 
         let sub = lnrpc::InvoiceSubscription::default();
         let mut invoice_stream = lnd
@@ -54,13 +54,13 @@ pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key
 
                         match tokio::time::timeout(Duration::from_secs(30), fut).await {
                             Ok(Ok(_)) => {
-                                println!("Handled paid invoice!");
+                                tracing::info!("Handled paid invoice!");
                             }
                             Ok(Err(e)) => {
-                                eprintln!("Failed to handle paid invoice: {}", e);
+                                tracing::error!("Failed to handle paid invoice: {}", e);
                             }
                             Err(_) => {
-                                eprintln!("Timeout");
+                                tracing::error!("Timeout");
                             }
                         }
                     });
@@ -121,7 +121,7 @@ async fn handle_paid_invoice(db: &Db, payment_hash: String, keys: Keys) -> anyho
             let event_id = client.send_event(event).await?;
             let _ = client.disconnect().await;
 
-            println!(
+            tracing::info!(
                 "Broadcasted event id: {}!",
                 event_id.to_bech32().expect("bech32")
             );

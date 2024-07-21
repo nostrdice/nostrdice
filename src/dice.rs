@@ -77,7 +77,7 @@ pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
             )
             .to_event(&keys)?;
             let event_id = client.send_event(event).await?;
-            println!(
+            tracing::info!(
                 "Broadcasted event id: {}!",
                 event_id.to_bech32().expect("bech32")
             );

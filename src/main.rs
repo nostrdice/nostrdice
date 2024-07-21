@@ -27,12 +27,14 @@ use tonic_openssl_lnd::lnrpc::GetInfoResponse;
 use tonic_openssl_lnd::LndLightningClient;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
+use tracing::level_filters::LevelFilter;
 
 mod config;
 mod db;
 mod dice;
 mod routes;
 mod subscriber;
+mod logger;
 
 #[derive(Clone)]
 pub struct State {
@@ -45,6 +47,9 @@ pub struct State {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+
+    logger::init_tracing(LevelFilter::DEBUG, false)?;
+
     let config: Config = Config::parse();
 
     let mut client = tonic_openssl_lnd::connect(
@@ -63,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
         .expect("Failed to get lnd info")
         .into_inner();
 
-    println!("Connected to LND: {}", lnd_info.identity_pubkey);
+    tracing::info!("Connected to LND: {}", lnd_info.identity_pubkey);
 
     // Create the datadir if it doesn't exist
     let path = PathBuf::from(&config.data_dir);
@@ -98,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .expect("Failed to parse bind/port for webserver");
 
-    println!("Webserver running on http://{}", addr);
+    tracing::info!("Webserver running on http://{}", addr);
 
     let server_router = Router::new()
         .route("/get-invoice/:hash", get(get_invoice))
@@ -131,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Await the server to receive the shutdown signal
     if let Err(e) = graceful.await {
-        eprintln!("shutdown error: {}", e);
+        tracing::error!("shutdown error: {}", e);
     }
 
     Ok(())
