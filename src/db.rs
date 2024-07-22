@@ -1,5 +1,6 @@
 use lightning_invoice::Bolt11Invoice;
 use nostr::Event;
+use nostr::PublicKey;
 use serde::Deserialize;
 use serde::Serialize;
 use sled::Db;
@@ -7,6 +8,7 @@ use strum_macros::EnumIter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Zap {
+    pub roller: PublicKey,
     pub invoice: Bolt11Invoice,
     pub request: Event,
     // the note_id of the multiplier e.g. x1.1 that has been zapped

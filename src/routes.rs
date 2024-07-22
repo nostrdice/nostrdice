@@ -63,6 +63,8 @@ pub(crate) async fn get_invoice_impl(
             })
             .collect::<Vec<_>>();
 
+        // TODO: we need to check if the user has a lightning address configured
+
         // TODO: we should check if the user zapped a correct multiplier.
         let zapped_note = tags
             // first is ok here, because there should only be one event (if any)
@@ -70,6 +72,7 @@ pub(crate) async fn get_invoice_impl(
             .context("can only accept zaps on notes.")?;
 
         let zap = Zap {
+            roller: zap_request.pubkey,
             invoice,
             request: zap_request,
             note_id: zapped_note.to_bech32()?,
