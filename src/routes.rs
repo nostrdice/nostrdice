@@ -30,7 +30,7 @@ pub(crate) async fn get_invoice_impl(
     amount_msats: u64,
     zap_request: Option<Event>,
 ) -> anyhow::Result<String> {
-    let mut lnd = state.lnd.clone();
+    let mut lnd = state.lightning_client.clone();
     let desc_hash = match zap_request.as_ref() {
         None => sha256::Hash::from_str(&hash)?,
         Some(event) => {

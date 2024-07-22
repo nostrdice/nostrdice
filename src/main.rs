@@ -1,7 +1,9 @@
 use crate::config::*;
 use crate::dice::start_rounds;
+use crate::dice::LndZapper;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
+use crate::zapper::start_zapper;
 use axum::http;
 use axum::http::Method;
 use axum::http::StatusCode;
@@ -25,6 +27,7 @@ use tokio::spawn;
 use tonic_openssl_lnd::lnrpc::GetInfoRequest;
 use tonic_openssl_lnd::lnrpc::GetInfoResponse;
 use tonic_openssl_lnd::LndLightningClient;
+use tonic_openssl_lnd::LndRouterClient;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
 use tracing::level_filters::LevelFilter;
@@ -35,11 +38,13 @@ mod dice;
 mod logger;
 mod routes;
 mod subscriber;
+mod zapper;
 
 #[derive(Clone)]
 pub struct State {
     pub db: Db,
-    pub lnd: LndLightningClient,
+    pub lightning_client: LndLightningClient,
+    pub router_client: LndRouterClient,
     pub keys: Keys,
     pub domain: String,
     pub route_hints: bool,
@@ -94,7 +99,8 @@ async fn main() -> anyhow::Result<()> {
 
     let state = State {
         db,
-        lnd: client.lightning().clone(),
+        lightning_client: client.lightning().clone(),
+        router_client: client.router().clone(),
         keys: keys.clone(),
         domain: config.domain.clone(),
         route_hints: config.route_hints,
@@ -123,12 +129,15 @@ async fn main() -> anyhow::Result<()> {
     // Invoice event stream
     spawn(start_invoice_subscription(
         state.db.clone(),
-        state.lnd.clone(),
+        state.lightning_client.clone(),
         keys.clone(),
         relays.clone(),
     ));
 
-    spawn(start_rounds(state.db.clone(), keys, relays));
+    let sender = start_zapper(client.router().clone());
+    let lnd_zapper = LndZapper { sender };
+
+    spawn(start_rounds(state.db.clone(), keys, relays, lnd_zapper));
 
     let graceful = server.with_graceful_shutdown(async {
         tokio::signal::ctrl_c()
