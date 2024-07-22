@@ -24,10 +24,18 @@ services:
       - polar-network-1_default
     volumes:
       - ./config/:/config
+    working_dir: /app
+    environment:
+      - RUST_LOG=DEBUG
     command:
-      # nostr-wallet-connect-lnd --relay ws://nostr-rs-relay:8080 --lnd-host alice --lnd-port 10009 --cert-file=/config/tls.cert --macaroon-file=/config/admin.macaroon
-      - "--relay"
-      - "ws://nostr-rs-relay:8080"
+      - ./nostr-wallet-connect-lnd
+      - --relay=ws://nostr-rs-relay:8080
+      - --lnd-host=alice
+      - --lnd-port=10009
+      - --cert-file=/config/tls.cert
+      - --macaroon-file=/config/admin.macaroon
+    depends_on:
+      - nostr-rs-relay
 
   webserver:
     image: nginx:latest
