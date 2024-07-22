@@ -137,7 +137,11 @@ async fn main() -> anyhow::Result<()> {
     let sender = start_zapper(client.router().clone());
     let lnd_zapper = LndZapper { sender };
 
-    spawn(start_rounds(state.db.clone(), keys, relays, lnd_zapper));
+    spawn(async move {
+        if let Err(e) = start_rounds(state.db.clone(), keys, relays, lnd_zapper).await {
+            tracing::error!("Stopped rolling dice: {e:#}");
+        }
+    });
 
     let graceful = server.with_graceful_shutdown(async {
         tokio::signal::ctrl_c()

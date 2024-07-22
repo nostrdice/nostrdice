@@ -1,13 +1,22 @@
 services:
-  nostr-dice:
+  nostrdice:
     image: nostr-dice # TODO: Should point to ghcr.io
-    container_name: nostr-dice
+    container_name: nostrdice
     networks:
       - polar-network-1_default
     volumes:
       - ./config/:/config
       - ./data/:/data
-    command: --data-dir=./data --port=1993 --lnd-host=bob --lnd-port=10009 --network=regtest --cert-file=/config/tls.cert --macaroon-file=/config/admin.macaroon
+    command:
+      - --relay=ws://nostr-rs-relay:8080
+      - --data-dir=./data
+      - --domain=localhost
+      - --port=1993
+      - --lnd-host=bob
+      - --lnd-port=10009
+      - --network=regtest
+      - --cert-file=/config/bob-tls.cert
+      - --macaroon-file=/config/bob-admin.macaroon
 
   nostr-rs-relay:
     image: ghcr.io/luckysori/nostr-rs-relay/nostr-rs-relay
@@ -32,13 +41,15 @@ services:
       - --relay=ws://nostr-rs-relay:8080
       - --lnd-host=alice
       - --lnd-port=10009
-      - --cert-file=/config/tls.cert
-      - --macaroon-file=/config/admin.macaroon
+      - --cert-file=/config/alice-tls.cert
+      - --macaroon-file=/config/alice-admin.macaroon
     depends_on:
       - nostr-rs-relay
 
   webserver:
     image: nginx:latest
+    networks:
+      - polar-network-1_default
     ports:
       - 80:80
       - 443:443

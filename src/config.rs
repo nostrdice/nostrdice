@@ -30,7 +30,7 @@ pub struct Config {
     /// Path to admin.macaroon file for lnd
     macaroon_file: Option<String>,
     /// The domain name you are running lnurl-server on
-    #[clap(default_value_t = String::from(""), long)]
+    #[clap(default_value_t = String::from("localhost"), long)]
     pub domain: String,
     #[clap(long)]
     /// Include route hints in invoices
