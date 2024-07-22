@@ -17,7 +17,12 @@ use tonic_openssl_lnd::lnrpc;
 use tonic_openssl_lnd::lnrpc::invoice::InvoiceState;
 use tonic_openssl_lnd::LndLightningClient;
 
-pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key: Keys, relays: Vec<String>) {
+pub async fn start_invoice_subscription(
+    db: Db,
+    mut lnd: LndLightningClient,
+    key: Keys,
+    relays: Vec<String>,
+) {
     loop {
         tracing::info!("Starting invoice subscription");
 
@@ -39,8 +44,12 @@ pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key
                     let db = db.clone();
                     let key = key.clone();
                     tokio::spawn(async move {
-                        let fut =
-                            handle_paid_invoice(&db, hex::encode(ln_invoice.r_hash), key.clone(), relays.clone());
+                        let fut = handle_paid_invoice(
+                            &db,
+                            hex::encode(ln_invoice.r_hash),
+                            key.clone(),
+                            relays.clone(),
+                        );
 
                         match tokio::time::timeout(Duration::from_secs(30), fut).await {
                             Ok(Ok(_)) => {
@@ -64,11 +73,16 @@ pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key
     }
 }
 
-async fn handle_paid_invoice(db: &Db, payment_hash: String, keys: Keys, relays: Vec<String>) -> anyhow::Result<()> {
+async fn handle_paid_invoice(
+    db: &Db,
+    payment_hash: String,
+    keys: Keys,
+    relays: Vec<String>,
+) -> anyhow::Result<()> {
     match get_zap(db, payment_hash.clone())? {
         None => Ok(()),
         Some(mut zap) => {
-            if zap.note_id.is_some() {
+            if zap.receipt_id.is_some() {
                 return Ok(());
             }
 
@@ -116,7 +130,7 @@ async fn handle_paid_invoice(db: &Db, payment_hash: String, keys: Keys, relays: 
                 event_id.to_bech32().expect("bech32")
             );
 
-            zap.note_id = Some(event_id.to_bech32().expect("bech32"));
+            zap.receipt_id = Some(event_id.to_bech32().expect("bech32"));
             upsert_zap(db, payment_hash, zap)?;
 
             Ok(())

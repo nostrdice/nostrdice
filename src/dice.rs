@@ -1,5 +1,6 @@
 use crate::db;
 use crate::db::DiceRoll;
+use crate::db::Multiplier;
 use anyhow::Result;
 use bitcoin::hashes::sha256;
 use bitcoin::secp256k1::rand;
@@ -15,16 +16,18 @@ use sha2::Digest;
 use sha2::Sha256;
 use sled::Db;
 use std::time::Duration;
+use strum::IntoEnumIterator;
 use tokio::time::sleep;
 
 // a new round every five minutes
 const ROUND_TIMEOUT: Duration = Duration::from_secs(60 * 5);
 
-const MULTIPLIERS: [&str; 11] = [
-    "1.05x", "1.1x", "1.33x", "1.5x", "2x", "3x", "10x", "25x", "50x", "100x", "1000x",
-];
-
 pub async fn start_rounds(db: Db, keys: Keys, relays: Vec<String>) -> Result<()> {
+    // Create new client
+    let client = Client::new(&keys);
+    client.add_relays(relays).await?;
+    client.connect().await;
+
     loop {
         let (roll, nonce) = {
             let mut rng = rand::thread_rng();
@@ -47,11 +50,6 @@ pub async fn start_rounds(db: Db, keys: Keys, relays: Vec<String>) -> Result<()>
         )
         .to_event(&keys)?;
 
-        // Create new client
-        let client = Client::new(&keys);
-        client.add_relays(relays.clone()).await?;
-        client.connect().await;
-
         let event_id = client.send_event(event.clone()).await?;
         let note_id = event.id.to_bech32().expect("bech32");
         println!("Broadcasted event id: {note_id}!",);
@@ -60,9 +58,8 @@ pub async fn start_rounds(db: Db, keys: Keys, relays: Vec<String>) -> Result<()>
             roll,
             nonce,
             event_id: note_id.clone(),
+            multipliers: vec![],
         };
-
-        db::upsert_dice_roll(&db, dice_roll)?;
 
         let mention_event = Tag::Event {
             event_id,
@@ -70,9 +67,9 @@ pub async fn start_rounds(db: Db, keys: Keys, relays: Vec<String>) -> Result<()>
             marker: Some(Marker::Mention),
         };
 
-        for multiplier in MULTIPLIERS {
+        for multiplier in Multiplier::iter() {
             let event = EventBuilder::text_note(
-                format!("{multiplier} nostr:{note_id}"),
+                format!("{} nostr:{note_id}", multiplier.get_content()),
                 [mention_event.clone()],
             )
             .to_event(&keys)?;
@@ -83,7 +80,7 @@ pub async fn start_rounds(db: Db, keys: Keys, relays: Vec<String>) -> Result<()>
             );
         }
 
-        let _ = client.disconnect().await;
+        db::upsert_dice_roll(&db, dice_roll)?;
 
         sleep(ROUND_TIMEOUT).await;
     }

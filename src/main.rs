@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
         state.db.clone(),
         state.lnd.clone(),
         keys.clone(),
-        relays.clone()
+        relays.clone(),
     ));
 
     spawn(start_rounds(state.db.clone(), keys, relays));

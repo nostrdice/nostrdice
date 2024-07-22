@@ -2,6 +2,7 @@ use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
 use anyhow::anyhow;
+use anyhow::Context;
 use axum::extract::Path;
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -16,6 +17,7 @@ use lnurl::Tag;
 use nostr::event;
 use nostr::Event;
 use nostr::JsonUtil;
+use nostr::ToBech32;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -58,15 +60,20 @@ pub(crate) async fn get_invoice_impl(
             .filter_map(|tag| match tag {
                 event::Tag::Event { event_id, .. } => Some(*event_id),
                 _ => None,
-            }).collect::<Vec<_>>();
-        let maybe_tag_id = tags
+            })
+            .collect::<Vec<_>>();
+
+        // TODO: we should check if the user zapped a correct multiplier.
+        let zapped_note = tags
             // first is ok here, because there should only be one event (if any)
-            .first();
+            .first()
+            .context("can only accept zaps on notes.")?;
 
         let zap = Zap {
             invoice,
             request: zap_request,
-            note_id: maybe_tag_id.map(|e| e.to_hex()),
+            note_id: zapped_note.to_bech32()?,
+            receipt_id: None,
         };
         upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
     }
