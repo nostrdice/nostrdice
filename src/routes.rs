@@ -2,7 +2,6 @@ use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
 use anyhow::anyhow;
-use anyhow::Context;
 use axum::extract::Path;
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -54,13 +53,13 @@ pub(crate) async fn get_invoice_impl(
     if let Some(zap_request) = zap_request {
         let invoice = Bolt11Invoice::from_str(&resp.payment_request)?;
         let tags = zap_request.tags();
-        let maybe_tag_id = tags
-            .into_iter()
+        let tags = tags
+            .iter()
             .filter_map(|tag| match tag {
                 event::Tag::Event { event_id, .. } => Some(*event_id),
                 _ => None,
-            })
-            .collect::<Vec<_>>()
+            }).collect::<Vec<_>>();
+        let maybe_tag_id = tags
             // first is ok here, because there should only be one event (if any)
             .first();
 
