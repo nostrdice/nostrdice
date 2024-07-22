@@ -24,7 +24,7 @@ const MULTIPLIERS: [&str; 11] = [
     "1.05x", "1.1x", "1.33x", "1.5x", "2x", "3x", "10x", "25x", "50x", "100x", "1000x",
 ];
 
-pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
+pub async fn start_rounds(db: Db, keys: Keys, relays: Vec<String>) -> Result<()> {
     loop {
         let (roll, nonce) = {
             let mut rng = rand::thread_rng();
@@ -49,7 +49,7 @@ pub async fn start_rounds(db: Db, keys: Keys) -> Result<()> {
 
         // Create new client
         let client = Client::new(&keys);
-        client.add_relays(crate::subscriber::RELAYS).await?;
+        client.add_relays(relays.clone()).await?;
         client.connect().await;
 
         let event_id = client.send_event(event.clone()).await?;

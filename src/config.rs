@@ -35,6 +35,10 @@ pub struct Config {
     #[clap(long)]
     /// Include route hints in invoices
     pub route_hints: bool,
+
+    #[arg(num_args(0..))]
+    #[clap(long)]
+    pub relay: Vec<String>,
 }
 
 impl Config {

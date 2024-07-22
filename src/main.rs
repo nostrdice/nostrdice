@@ -51,6 +51,8 @@ async fn main() -> anyhow::Result<()> {
 
     let config: Config = Config::parse();
 
+    let relays = config.clone().relay;
+
     let mut client = tonic_openssl_lnd::connect(
         config.lnd_host.clone(),
         config.lnd_port,
@@ -123,9 +125,10 @@ async fn main() -> anyhow::Result<()> {
         state.db.clone(),
         state.lnd.clone(),
         keys.clone(),
+        relays.clone()
     ));
 
-    spawn(start_rounds(state.db.clone(), keys));
+    spawn(start_rounds(state.db.clone(), keys, relays));
 
     let graceful = server.with_graceful_shutdown(async {
         tokio::signal::ctrl_c()
