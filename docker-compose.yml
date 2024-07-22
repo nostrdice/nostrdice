@@ -1,0 +1,44 @@
+services:
+  nostr-dice:
+    image: nostr-dice # TODO: Should point to ghcr.io
+    container_name: nostr-dice
+    networks:
+      - polar-network-1_default
+    volumes:
+      - ./config/:/config
+      - ./data/:/data
+    command: --data-dir=./data --port=1993 --lnd-host=bob --lnd-port=10009 --network=regtest --cert-file=/config/tls.cert --macaroon-file=/config/admin.macaroon
+
+  nostr-rs-relay:
+    image: ghcr.io/luckysori/nostr-rs-relay/nostr-rs-relay
+    container_name: nostr-rs-relay
+    networks:
+      - polar-network-1_default
+    ports:
+      - "7000:8080"
+
+  nostr-wallet-connect-lnd:
+    image: ghcr.io/benthecarman/nostr-wallet-connect-lnd:master
+    container_name: nostr-wallet-connect-lnd
+    networks:
+      - polar-network-1_default
+    volumes:
+      - ./config/:/config
+    command:
+      # nostr-wallet-connect-lnd --relay ws://nostr-rs-relay:8080 --lnd-host alice --lnd-port 10009 --cert-file=/config/tls.cert --macaroon-file=/config/admin.macaroon
+      - "--relay"
+      - "ws://nostr-rs-relay:8080"
+
+  webserver:
+    image: nginx:latest
+    ports:
+      - 80:80
+      - 443:443
+    restart: always
+    volumes:
+      - ./config/:/etc/nginx/conf.d/:ro
+      - ./config/:/var/www/cert/:ro
+
+networks:
+  polar-network-1_default:
+    external: true
