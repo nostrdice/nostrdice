@@ -39,8 +39,11 @@ services:
     hostname: alice
     command: >-
       lnd --noseedbackup --trickledelay=5000 --alias=alice --externalip=alice
-      --tlsextradomain=alice --tlsextradomain=alice
+      --tlsextradomain=alice
+      --tlscertpath=/home/lnd/config/tls.cert
+      --tlskeypath=/home/lnd/config/tls.key
       --tlsextradomain=host.docker.internal --listen=0.0.0.0:9735
+      --adminmacaroonpath=/home/lnd/config/admin.macaroon
       --rpclisten=0.0.0.0:10009 --restlisten=0.0.0.0:8080 --bitcoin.active
       --bitcoin.regtest --bitcoin.node=bitcoind
       --bitcoind.rpchost=polar-n1-backend1 --bitcoind.rpcuser=polaruser
@@ -50,6 +53,9 @@ services:
     restart: always
     volumes:
       - ./testsetup.polar/volumes/lnd/alice:/home/lnd/.lnd
+      - ./testsetup.polar/volumes/lnd/alice/tls.cert:/home/lnd/config/tls.cert
+      - ./testsetup.polar/volumes/lnd/alice/tls.key:/home/lnd/config/tls.key
+      - ./testsetup.polar/volumes/lnd/alice/data/chain/bitcoin/regtest/admin.macaroon:/home/lnd/config/admin.macaroon
     expose:
       - '8080'
       - '10009'
@@ -70,8 +76,11 @@ services:
     hostname: bob
     command: >-
       lnd --noseedbackup --trickledelay=5000 --alias=bob --externalip=bob
-      --tlsextradomain=bob --tlsextradomain=bob
+      --tlsextradomain=bob
+      --tlscertpath=/home/lnd/config/tls.cert
+      --tlskeypath=/home/lnd/config/tls.key
       --tlsextradomain=host.docker.internal --listen=0.0.0.0:9735
+      --adminmacaroonpath=/home/lnd/config/admin.macaroon
       --rpclisten=0.0.0.0:10009 --restlisten=0.0.0.0:8080 --bitcoin.active
       --bitcoin.regtest --bitcoin.node=bitcoind
       --bitcoind.rpchost=polar-n1-backend1 --bitcoind.rpcuser=polaruser
@@ -81,6 +90,9 @@ services:
     restart: always
     volumes:
       - ./testsetup.polar/volumes/lnd/bob:/home/lnd/.lnd
+      - ./testsetup.polar/volumes/lnd/bob/tls.cert:/home/lnd/config/tls.cert
+      - ./testsetup.polar/volumes/lnd/bob/tls.key:/home/lnd/config/tls.key
+      - ./testsetup.polar/volumes/lnd/bob/data/chain/bitcoin/regtest/admin.macaroon:/home/lnd/config/admin.macaroon
     expose:
       - '8080'
       - '10009'
@@ -99,8 +111,9 @@ services:
       - alice
       - bob
     volumes:
-      - ./config/:/config
       - ./data/:/data
+      - ./testsetup.polar/volumes/lnd/bob/tls.cert:/config/tls.cert
+      - ./testsetup.polar/volumes/lnd/bob/data/chain/bitcoin/regtest/admin.macaroon:/config/admin.macaroon
     command:
       - --relay=ws://nostr-rs-relay:8080
       - --data-dir=./data
@@ -109,8 +122,8 @@ services:
       - --lnd-host=bob
       - --lnd-port=10009
       - --network=regtest
-      - --cert-file=/config/bob-tls.cert
-      - --macaroon-file=/config/bob-admin.macaroon
+      - --cert-file=/config/tls.cert
+      - --macaroon-file=/config/admin.macaroon
     networks:
       - nostr-dice-network
 
@@ -128,7 +141,8 @@ services:
     networks:
       - nostr-dice-network
     volumes:
-      - ./config/:/config
+      - ./testsetup.polar/volumes/lnd/alice/tls.cert:/config/tls.cert
+      - ./testsetup.polar/volumes/lnd/alice/data/chain/bitcoin/regtest/admin.macaroon:/config/admin.macaroon
     working_dir: /app
     environment:
       - RUST_LOG=DEBUG
@@ -137,8 +151,8 @@ services:
       - --relay=ws://nostr-rs-relay:8080
       - --lnd-host=alice
       - --lnd-port=10009
-      - --cert-file=/config/alice-tls.cert
-      - --macaroon-file=/config/alice-admin.macaroon
+      - --cert-file=/config/tls.cert
+      - --macaroon-file=/config/admin.macaroon
     depends_on:
       - nostr-rs-relay
       - alice
