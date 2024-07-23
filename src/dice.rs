@@ -145,7 +145,10 @@ pub async fn start_rounds(
                                     / 1000.0)
                                     * winner.multiplier.get_multiplier())
                                 .floor() as u64;
-                            client.zap(zap.roller, amount_sat, None).await?;
+
+                            if let Err(e) = client.zap(zap.roller, amount_sat, None).await {
+                                tracing::error!("Failed to zap {}. Error: {e:#}", zap.roller);
+                            }
                         }
                     }
                 }
