@@ -1,6 +1,7 @@
 use crate::db;
 use crate::db::DiceRoll;
 use crate::db::Multiplier;
+use crate::db::MultiplierNote;
 use crate::zapper::PayInvoice;
 use anyhow::Result;
 use bitcoin::hashes::sha256;
@@ -89,7 +90,7 @@ pub async fn start_rounds(
         let note_id = event.id.to_bech32().expect("bech32");
         println!("Broadcasted event id: {note_id}!",);
 
-        let dice_roll = DiceRoll {
+        let mut dice_roll = DiceRoll {
             roll,
             nonce,
             event_id: note_id.clone(),
@@ -109,10 +110,13 @@ pub async fn start_rounds(
             )
             .to_event(&keys)?;
             let event_id = client.send_event(event).await?;
-            tracing::info!(
-                "Broadcasted event id: {}!",
-                event_id.to_bech32().expect("bech32")
-            );
+            let note_id = event_id.to_bech32().expect("bech32");
+            tracing::info!("Broadcasted multiplier note: {note_id}");
+
+            dice_roll.multipliers.push(MultiplierNote {
+                multiplier,
+                note_id,
+            })
         }
 
         db::upsert_dice_roll(&db, dice_roll.clone())?;
