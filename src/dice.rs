@@ -15,6 +15,7 @@ use nostr::ToBech32;
 use nostr_sdk::zapper::async_trait;
 use nostr_sdk::Client;
 use nostr_sdk::NostrZapper;
+use nostr_sdk::Options;
 use nostr_sdk::ZapperBackend;
 use nostr_sdk::ZapperError;
 use rand::Rng;
@@ -57,8 +58,14 @@ pub async fn start_rounds(
     relays: Vec<String>,
     lnd_zapper: LndZapper,
 ) -> Result<()> {
+    let options = Options::default();
     // Create new client
-    let client = Client::new(&keys);
+    let client = Client::with_opts(
+        &keys,
+        options
+            .wait_for_send(true)
+            .send_timeout(Some(Duration::from_secs(20))),
+    );
     client.add_relays(relays).await?;
 
     client.set_zapper(lnd_zapper).await;
