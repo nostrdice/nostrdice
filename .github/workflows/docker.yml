@@ -57,5 +57,5 @@ jobs:
 
       - name: Push Docker image
         run: |
-          docker tag nostrdice:latest ${{ secrets.DOCKER_USERNAME }}/nostrdice:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/nostrdice:latest
+          docker tag nostrdice:latest ghcr.io/${{ github.repository }}/nostrdice:latest
+          docker push ghcr.io/${{ github.repository }}/nostrdice:latest
