@@ -1,0 +1,61 @@
+name: publish-docker
+
+on:
+  push:
+    branches:
+      - main
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        description: "The branch, tag or SHA to checkout."
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Setup rust toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v3
+
+      - name: Login into github registry
+        uses: docker/login-action@v2.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          # Note: if you want to fork this repo and push a container to your fork, you need to change this line to
+          # username: ${{ github.actor }}
+          username: ${{ github.repository }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build binary
+        run: cargo build --release
+
+      - name: Build Docker image
+        run: |
+          docker build -t nostrdice:latest .
+
+      - name: Login into github registry
+        uses: docker/login-action@v2.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image
+        run: |
+          docker tag nostrdice:latest ${{ secrets.DOCKER_USERNAME }}/nostrdice:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/nostrdice:latest
