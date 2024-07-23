@@ -138,7 +138,7 @@ pub async fn start_rounds(
             .into_iter()
             .filter(|m| m.multiplier.get_lower_than() > dice_roll.roll)
             .collect::<Vec<_>>();
-        tracing::debug!("And the winners are {winners:?}.");
+        tracing::debug!("[{}], And the winners are {winners:?}.", dice_roll.roll);
 
         for zap in db::get_all_zaps(&db)? {
             match zap.receipt_id {
