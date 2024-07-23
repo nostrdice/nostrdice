@@ -33,6 +33,8 @@ services:
     environment:
       USERID: ${USERID:-1000}
       GROUPID: ${GROUPID:-1000}
+    depends_on:
+      - backend1
     stop_grace_period: 2m
     image: polarlightning/lnd:0.18.2-beta
     container_name: alice
@@ -40,10 +42,7 @@ services:
     command: >-
       lnd --noseedbackup --trickledelay=5000 --alias=alice --externalip=alice
       --tlsextradomain=alice
-      --tlscertpath=/home/lnd/config/tls.cert
-      --tlskeypath=/home/lnd/config/tls.key
       --tlsextradomain=host.docker.internal --listen=0.0.0.0:9735
-      --adminmacaroonpath=/home/lnd/config/admin.macaroon
       --rpclisten=0.0.0.0:10009 --restlisten=0.0.0.0:8080 --bitcoin.active
       --bitcoin.regtest --bitcoin.node=bitcoind
       --bitcoind.rpchost=polar-n1-backend1 --bitcoind.rpcuser=polaruser
@@ -53,9 +52,6 @@ services:
     restart: always
     volumes:
       - ./testsetup.polar/volumes/lnd/alice:/home/lnd/.lnd
-      - ./testsetup.polar/volumes/lnd/alice/tls.cert:/home/lnd/config/tls.cert
-      - ./testsetup.polar/volumes/lnd/alice/tls.key:/home/lnd/config/tls.key
-      - ./testsetup.polar/volumes/lnd/alice/data/chain/bitcoin/regtest/admin.macaroon:/home/lnd/config/admin.macaroon
     expose:
       - '8080'
       - '10009'
@@ -70,6 +66,8 @@ services:
     environment:
       USERID: ${USERID:-1000}
       GROUPID: ${GROUPID:-1000}
+    depends_on:
+      - backend1
     stop_grace_period: 2m
     image: polarlightning/lnd:0.18.2-beta
     container_name: bob
@@ -77,10 +75,7 @@ services:
     command: >-
       lnd --noseedbackup --trickledelay=5000 --alias=bob --externalip=bob
       --tlsextradomain=bob
-      --tlscertpath=/home/lnd/config/tls.cert
-      --tlskeypath=/home/lnd/config/tls.key
       --tlsextradomain=host.docker.internal --listen=0.0.0.0:9735
-      --adminmacaroonpath=/home/lnd/config/admin.macaroon
       --rpclisten=0.0.0.0:10009 --restlisten=0.0.0.0:8080 --bitcoin.active
       --bitcoin.regtest --bitcoin.node=bitcoind
       --bitcoind.rpchost=polar-n1-backend1 --bitcoind.rpcuser=polaruser
@@ -90,9 +85,6 @@ services:
     restart: always
     volumes:
       - ./testsetup.polar/volumes/lnd/bob:/home/lnd/.lnd
-      - ./testsetup.polar/volumes/lnd/bob/tls.cert:/home/lnd/config/tls.cert
-      - ./testsetup.polar/volumes/lnd/bob/tls.key:/home/lnd/config/tls.key
-      - ./testsetup.polar/volumes/lnd/bob/data/chain/bitcoin/regtest/admin.macaroon:/home/lnd/config/admin.macaroon
     expose:
       - '8080'
       - '10009'
