@@ -147,6 +147,10 @@ services:
 
   webserver:
     image: nginx:latest
+    container_name: webserver
+    hostname: webserver
+    depends_on:
+      - nostrdice
     networks:
       - nostr-dice-network
     ports:
