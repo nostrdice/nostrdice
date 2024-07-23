@@ -129,7 +129,7 @@ pub async fn start_rounds(
         let winners = dice_roll
             .multipliers
             .into_iter()
-            .filter(|m| m.multiplier.get_lower_than() < dice_roll.roll)
+            .filter(|m| m.multiplier.get_lower_than() > dice_roll.roll)
             .collect::<Vec<_>>();
         tracing::debug!("And the winners are {winners:?}.");
 
