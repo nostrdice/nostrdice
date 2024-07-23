@@ -111,6 +111,7 @@ pub async fn start_rounds(
         };
 
         for multiplier in Multiplier::iter() {
+            tokio::time::sleep(Duration::from_secs(20)).await;
             let event = EventBuilder::text_note(
                 format!("{} nostr:{note_id}", multiplier.get_content()),
                 [mention_event.clone()],
