@@ -2,6 +2,7 @@ use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
 use anyhow::anyhow;
+use anyhow::Context;
 use axum::extract::Path;
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -13,8 +14,10 @@ use bitcoin::secp256k1::ThirtyTwoByteHash;
 use lightning_invoice::Bolt11Invoice;
 use lnurl::pay::PayResponse;
 use lnurl::Tag;
+use nostr::event;
 use nostr::Event;
 use nostr::JsonUtil;
+use nostr::ToBech32;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -27,7 +30,7 @@ pub(crate) async fn get_invoice_impl(
     amount_msats: u64,
     zap_request: Option<Event>,
 ) -> anyhow::Result<String> {
-    let mut lnd = state.lnd.clone();
+    let mut lnd = state.lightning_client.clone();
     let desc_hash = match zap_request.as_ref() {
         None => sha256::Hash::from_str(&hash)?,
         Some(event) => {
@@ -51,10 +54,29 @@ pub(crate) async fn get_invoice_impl(
 
     if let Some(zap_request) = zap_request {
         let invoice = Bolt11Invoice::from_str(&resp.payment_request)?;
+        let tags = zap_request.tags();
+        let tags = tags
+            .iter()
+            .filter_map(|tag| match tag {
+                event::Tag::Event { event_id, .. } => Some(*event_id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        // TODO: we need to check if the user has a lightning address configured
+
+        // TODO: we should check if the user zapped a correct multiplier.
+        let zapped_note = tags
+            // first is ok here, because there should only be one event (if any)
+            .first()
+            .context("can only accept zaps on notes.")?;
+
         let zap = Zap {
+            roller: zap_request.pubkey,
             invoice,
             request: zap_request,
-            note_id: None,
+            note_id: zapped_note.to_bech32()?,
+            receipt_id: None,
         };
         upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
     }

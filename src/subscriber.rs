@@ -17,18 +17,12 @@ use tonic_openssl_lnd::lnrpc;
 use tonic_openssl_lnd::lnrpc::invoice::InvoiceState;
 use tonic_openssl_lnd::LndLightningClient;
 
-pub const RELAYS: [&str; 8] = [
-    "wss://nostr.mutinywallet.com",
-    "wss://relay.snort.social",
-    "wss://relay.nostr.band",
-    "wss://eden.nostr.land",
-    "wss://nos.lol",
-    "wss://nostr.fmt.wiz.biz",
-    "wss://relay.damus.io",
-    "wss://nostr.wine",
-];
-
-pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key: Keys) {
+pub async fn start_invoice_subscription(
+    db: Db,
+    mut lnd: LndLightningClient,
+    key: Keys,
+    relays: Vec<String>,
+) {
     loop {
         tracing::info!("Starting invoice subscription");
 
@@ -44,13 +38,18 @@ pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key
             .await
             .expect("Failed to receive invoices")
         {
+            let relays = relays.clone();
             match InvoiceState::from_i32(ln_invoice.state) {
                 Some(InvoiceState::Settled) => {
                     let db = db.clone();
                     let key = key.clone();
                     tokio::spawn(async move {
-                        let fut =
-                            handle_paid_invoice(&db, hex::encode(ln_invoice.r_hash), key.clone());
+                        let fut = handle_paid_invoice(
+                            &db,
+                            hex::encode(ln_invoice.r_hash),
+                            key.clone(),
+                            relays.clone(),
+                        );
 
                         match tokio::time::timeout(Duration::from_secs(30), fut).await {
                             Ok(Ok(_)) => {
@@ -74,11 +73,16 @@ pub async fn start_invoice_subscription(db: Db, mut lnd: LndLightningClient, key
     }
 }
 
-async fn handle_paid_invoice(db: &Db, payment_hash: String, keys: Keys) -> anyhow::Result<()> {
+async fn handle_paid_invoice(
+    db: &Db,
+    payment_hash: String,
+    keys: Keys,
+    relays: Vec<String>,
+) -> anyhow::Result<()> {
     match get_zap(db, payment_hash.clone())? {
         None => Ok(()),
         Some(mut zap) => {
-            if zap.note_id.is_some() {
+            if zap.receipt_id.is_some() {
                 return Ok(());
             }
 
@@ -115,7 +119,7 @@ async fn handle_paid_invoice(db: &Db, payment_hash: String, keys: Keys) -> anyho
 
             // Create new client
             let client = Client::new(&keys);
-            client.add_relays(RELAYS).await?;
+            client.add_relays(relays.clone()).await?;
             client.connect().await;
 
             let event_id = client.send_event(event).await?;
@@ -126,7 +130,7 @@ async fn handle_paid_invoice(db: &Db, payment_hash: String, keys: Keys) -> anyho
                 event_id.to_bech32().expect("bech32")
             );
 
-            zap.note_id = Some(event_id.to_bech32().expect("bech32"));
+            zap.receipt_id = Some(event_id.to_bech32().expect("bech32"));
             upsert_zap(db, payment_hash, zap)?;
 
             Ok(())

@@ -1,7 +1,9 @@
 use crate::config::*;
 use crate::dice::start_rounds;
+use crate::dice::LndZapper;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
+use crate::zapper::start_zapper;
 use axum::http;
 use axum::http::Method;
 use axum::http::StatusCode;
@@ -25,6 +27,7 @@ use tokio::spawn;
 use tonic_openssl_lnd::lnrpc::GetInfoRequest;
 use tonic_openssl_lnd::lnrpc::GetInfoResponse;
 use tonic_openssl_lnd::LndLightningClient;
+use tonic_openssl_lnd::LndRouterClient;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
 use tracing::level_filters::LevelFilter;
@@ -32,14 +35,16 @@ use tracing::level_filters::LevelFilter;
 mod config;
 mod db;
 mod dice;
+mod logger;
 mod routes;
 mod subscriber;
-mod logger;
+mod zapper;
 
 #[derive(Clone)]
 pub struct State {
     pub db: Db,
-    pub lnd: LndLightningClient,
+    pub lightning_client: LndLightningClient,
+    pub router_client: LndRouterClient,
     pub keys: Keys,
     pub domain: String,
     pub route_hints: bool,
@@ -47,10 +52,11 @@ pub struct State {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
     logger::init_tracing(LevelFilter::DEBUG, false)?;
 
     let config: Config = Config::parse();
+
+    let relays = config.clone().relay;
 
     let mut client = tonic_openssl_lnd::connect(
         config.lnd_host.clone(),
@@ -93,7 +99,8 @@ async fn main() -> anyhow::Result<()> {
 
     let state = State {
         db,
-        lnd: client.lightning().clone(),
+        lightning_client: client.lightning().clone(),
+        router_client: client.router().clone(),
         keys: keys.clone(),
         domain: config.domain.clone(),
         route_hints: config.route_hints,
@@ -122,11 +129,19 @@ async fn main() -> anyhow::Result<()> {
     // Invoice event stream
     spawn(start_invoice_subscription(
         state.db.clone(),
-        state.lnd.clone(),
+        state.lightning_client.clone(),
         keys.clone(),
+        relays.clone(),
     ));
 
-    spawn(start_rounds(state.db.clone(), keys));
+    let sender = start_zapper(client.router().clone());
+    let lnd_zapper = LndZapper { sender };
+
+    spawn(async move {
+        if let Err(e) = start_rounds(state.db.clone(), keys, relays, lnd_zapper).await {
+            tracing::error!("Stopped rolling dice: {e:#}");
+        }
+    });
 
     let graceful = server.with_graceful_shutdown(async {
         tokio::signal::ctrl_c()
