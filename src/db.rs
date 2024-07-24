@@ -1,7 +1,9 @@
 use anyhow::Context;
 use lightning_invoice::Bolt11Invoice;
 use nostr::Event;
+use nostr::EventId;
 use nostr::PublicKey;
+use nostr::ToBech32;
 use serde::Deserialize;
 use serde::Serialize;
 use sled::Db;
@@ -22,17 +24,23 @@ pub struct Zap {
     pub payout_id: Option<String>,
 }
 
-pub fn upsert_zap(db: &Db, payment_hash: String, zap: Zap) -> anyhow::Result<()> {
+// The event id is the note id of the round announcing the roll.
+pub fn upsert_zap(
+    db: &Db,
+    event_id: EventId,
+    payment_hash: String,
+    zap: Zap,
+) -> anyhow::Result<()> {
     let value = serde_json::to_vec(&zap)?;
 
-    let zap_tree = db.open_tree("zap")?;
+    let zap_tree = db.open_tree(event_id.to_hex())?;
     zap_tree.insert(payment_hash.as_bytes(), value)?;
 
     Ok(())
 }
 
-pub fn get_all_zaps(db: &Db) -> anyhow::Result<Vec<Zap>> {
-    let zap_tree = db.open_tree("zap")?;
+pub fn get_all_zaps_by_event_id(db: &Db, event_id: EventId) -> anyhow::Result<Vec<Zap>> {
+    let zap_tree = db.open_tree(event_id.to_hex())?;
 
     let zaps = zap_tree
         .iter()
@@ -44,8 +52,8 @@ pub fn get_all_zaps(db: &Db) -> anyhow::Result<Vec<Zap>> {
     Ok(zaps)
 }
 
-pub fn get_zap(db: &Db, payment_hash: String) -> anyhow::Result<Option<Zap>> {
-    let zap_tree = db.open_tree("zap")?;
+pub fn get_zap(db: &Db, event_id: EventId, payment_hash: String) -> anyhow::Result<Option<Zap>> {
+    let zap_tree = db.open_tree(event_id.to_hex())?;
     let value = zap_tree.get(payment_hash.as_bytes())?;
 
     match value {
@@ -138,8 +146,64 @@ impl Multiplier {
 pub struct DiceRoll {
     pub roll: u16,
     pub nonce: u64,
-    pub event_id: String,
+    pub event_id: EventId,
     pub multipliers: Vec<MultiplierNote>,
+}
+
+impl DiceRoll {
+    pub fn get_note_id(&self) -> String {
+        self.event_id.to_bech32().expect("to fit")
+    }
+
+    pub fn get_multiplier_note(&self, note_id: String) -> Option<MultiplierNote> {
+        self.multipliers
+            .clone()
+            .into_iter()
+            .find(|m| m.note_id == note_id)
+    }
+}
+
+pub fn set_active_dice_roll(db: &Db, event_id: EventId) -> anyhow::Result<()> {
+    let dice_roll_tree = db.open_tree("dice_roll")?;
+
+    let value = serde_json::to_vec(&event_id)?;
+    dice_roll_tree.insert("active".as_bytes(), value)?;
+
+    Ok(())
+}
+
+pub fn remove_active_dice_roll(db: &Db) -> anyhow::Result<Option<DiceRoll>> {
+    let dice_roll_tree = db.open_tree("dice_roll")?;
+    let active_dice_roll = dice_roll_tree.remove("active".as_bytes())?;
+
+    let event_id: EventId = match active_dice_roll {
+        Some(event_id) => serde_json::from_slice(&event_id)?,
+        None => return Ok(None),
+    };
+
+    let dice_roll = dice_roll_tree
+        .get(event_id.as_bytes())?
+        .context("missing dice roll")?;
+    let dice_roll = serde_json::from_slice(&dice_roll)?;
+
+    Ok(Some(dice_roll))
+}
+
+pub fn get_active_dice_roll(db: &Db) -> anyhow::Result<Option<DiceRoll>> {
+    let dice_roll_tree = db.open_tree("dice_roll")?;
+    let active_dice_roll = dice_roll_tree.get("active".as_bytes())?;
+
+    let event_id: EventId = match active_dice_roll {
+        Some(event_id) => serde_json::from_slice(&event_id)?,
+        None => return Ok(None),
+    };
+
+    let dice_roll = dice_roll_tree
+        .get(event_id.as_bytes())?
+        .context("missing dice roll")?;
+    let dice_roll = serde_json::from_slice(&dice_roll)?;
+
+    Ok(Some(dice_roll))
 }
 
 pub fn upsert_dice_roll(db: &Db, dice_roll: DiceRoll) -> anyhow::Result<()> {

@@ -1,5 +1,7 @@
+use crate::db;
 use crate::db::get_zap;
 use crate::db::upsert_zap;
+use anyhow::Context;
 use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
@@ -21,7 +23,7 @@ pub async fn start_invoice_subscription(
     db: Db,
     mut lnd: LndLightningClient,
     key: Keys,
-    relays: Vec<String>,
+    client: Client,
 ) {
     loop {
         tracing::info!("Starting invoice subscription");
@@ -38,28 +40,30 @@ pub async fn start_invoice_subscription(
             .await
             .expect("Failed to receive invoices")
         {
-            let relays = relays.clone();
             match InvoiceState::from_i32(ln_invoice.state) {
                 Some(InvoiceState::Settled) => {
                     let db = db.clone();
                     let key = key.clone();
-                    tokio::spawn(async move {
-                        let fut = handle_paid_invoice(
-                            &db,
-                            hex::encode(ln_invoice.r_hash),
-                            key.clone(),
-                            relays.clone(),
-                        );
+                    tokio::spawn({
+                        let client = client.clone();
+                        async move {
+                            let fut = handle_paid_invoice(
+                                &db,
+                                hex::encode(ln_invoice.r_hash),
+                                key.clone(),
+                                client,
+                            );
 
-                        match tokio::time::timeout(Duration::from_secs(30), fut).await {
-                            Ok(Ok(_)) => {
-                                tracing::info!("Handled paid invoice!");
-                            }
-                            Ok(Err(e)) => {
-                                tracing::error!("Failed to handle paid invoice: {}", e);
-                            }
-                            Err(_) => {
-                                tracing::error!("Timeout");
+                            match tokio::time::timeout(Duration::from_secs(30), fut).await {
+                                Ok(Ok(_)) => {
+                                    tracing::info!("Handled paid invoice!");
+                                }
+                                Ok(Err(e)) => {
+                                    tracing::error!("Failed to handle paid invoice: {}", e);
+                                }
+                                Err(_) => {
+                                    tracing::error!("Timeout");
+                                }
                             }
                         }
                     });
@@ -77,9 +81,12 @@ async fn handle_paid_invoice(
     db: &Db,
     payment_hash: String,
     keys: Keys,
-    relays: Vec<String>,
+    client: Client,
 ) -> anyhow::Result<()> {
-    match get_zap(db, payment_hash.clone())? {
+    let dice_roll = db::get_active_dice_roll(db)?.context("No active dice roll.")?;
+    let event_id = dice_roll.event_id;
+
+    match get_zap(db, event_id, payment_hash.clone())? {
         None => Ok(()),
         Some(mut zap) => {
             if zap.receipt_id.is_some() {
@@ -117,13 +124,7 @@ async fn handle_paid_invoice(
             )
             .to_event(&keys)?;
 
-            // Create new client
-            let client = Client::new(&keys);
-            client.add_relays(relays.clone()).await?;
-            client.connect().await;
-
             let event_id = client.send_event(event).await?;
-            let _ = client.disconnect().await;
 
             tracing::info!(
                 "Broadcasted event id: {}!",
@@ -131,7 +132,7 @@ async fn handle_paid_invoice(
             );
 
             zap.receipt_id = Some(event_id.to_bech32().expect("bech32"));
-            upsert_zap(db, payment_hash, zap)?;
+            upsert_zap(db, event_id, payment_hash, zap)?;
 
             Ok(())
         }
