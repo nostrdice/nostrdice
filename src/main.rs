@@ -156,27 +156,18 @@ async fn main() -> anyhow::Result<()> {
         client.clone(),
     ));
 
-    // TODO: add a way to stop a round, so we do not accidentally stop a round with active bets on
-    // them.
-    spawn({
-        let client = client.clone();
-        async move {
-            let dice_roller = DiceRoller::new(client.clone(), keys.clone());
-            if let Err(e) = run_rounds(state.db.clone(), dice_roller).await {
-                tracing::error!("Stopped rolling dice: {e:#}");
-            }
-        }
-    });
-
-    let graceful = server.with_graceful_shutdown(async {
+    // We spawn this so that the underlying ctrl_c handler is polled immediately. Else, the
+    // signal will simply be missed.
+    let graceful = spawn(server.with_graceful_shutdown(async {
         tokio::signal::ctrl_c()
             .await
             .expect("failed to create Ctrl+C shutdown signal");
-    });
+    }));
 
-    // Await the server to receive the shutdown signal
-    if let Err(e) = graceful.await {
-        tracing::error!("shutdown error: {}", e);
+    let client = client.clone();
+    let dice_roller = DiceRoller::new(client.clone(), keys.clone());
+    if let Err(e) = run_rounds(state.db.clone(), dice_roller, graceful).await {
+        tracing::error!("Stopped rolling dice: {e:#}");
     }
 
     client.disconnect().await?;

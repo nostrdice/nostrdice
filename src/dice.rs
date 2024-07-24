@@ -26,7 +26,9 @@ use sha2::Digest;
 use sha2::Sha256;
 use sled::Db;
 use std::fmt::Debug;
+use std::future::Future;
 use std::ops::Add;
+use std::ops::ControlFlow;
 use std::time::Duration;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc;
@@ -193,56 +195,75 @@ impl NostrZapper for LndZapper {
     }
 }
 
-pub async fn run_rounds(db: Db, dice_roller: DiceRoller) -> Result<()> {
+pub async fn run_rounds(db: Db, dice_roller: DiceRoller, shutdown: impl Future) -> Result<()> {
+    tokio::pin!(shutdown);
+
     loop {
-        match db::get_active_dice_roll(&db)? {
-            None => {
-                tokio::spawn({
+        let do_roll = async {
+            match db::get_active_dice_roll(&db)? {
+                None => {
+                    let deadline = sleep(ROUND_TIMEOUT);
                     let dice_roller = dice_roller.clone();
                     let db = db.clone();
-                    async move {
-                        match dice_roller.start_roll().await {
-                            Ok(dice_roll) => {
-                                let note_id = dice_roll.get_note_id();
-                                tracing::info!("Started new round with note id: {}", note_id);
-                                if let Err(e) = db::set_active_dice_roll(&db, dice_roll.event_id) {
-                                    tracing::error!(
-                                        note_id,
-                                        "Failed to set dice roll active. Error: {e:#}"
-                                    );
-                                }
 
-                                if let Err(e) = db::upsert_dice_roll(&db, dice_roll.clone()) {
-                                    tracing::error!(
-                                        note_id,
-                                        "Failed to upsert dice roll. Error: {e:#}"
-                                    );
-                                }
+                    match dice_roller.start_roll().await {
+                        Ok(dice_roll) => {
+                            let note_id = dice_roll.get_note_id();
+                            tracing::info!("Started new round with note id: {}", note_id);
 
-                                // we already set the dice roll active since the multipliers will be
-                                // published with delays. this way the user doesn't have to wait for
-                                // all multiplier notes to be published before he can place a bet.
-                                if let Err(e) = dice_roller.add_multipliers(&db, dice_roll).await {
-                                    tracing::error!("Failed to add multiplier notes to roll event. Error: {e:#}");
-                                }
+                            if let Err(e) = db::set_active_dice_roll(&db, dice_roll.event_id) {
+                                tracing::error!(
+                                    note_id,
+                                    "Failed to set dice roll active. Error: {e:#}"
+                                );
                             }
-                            Err(e) => {
-                                tracing::error!("Failed to roll the dice. Error: {e:#}");
+
+                            if let Err(e) = db::upsert_dice_roll(&db, dice_roll.clone()) {
+                                tracing::error!(
+                                    note_id,
+                                    "Failed to upsert dice roll. Error: {e:#}"
+                                );
                             }
+
+                            // we already set the dice roll active since the multipliers will be
+                            // published with delays. this way the user doesn't have to wait for
+                            // all multiplier notes to be published before he can place a bet.
+                            if let Err(e) = dice_roller.add_multipliers(&db, dice_roll).await {
+                                tracing::error!(
+                                    "Failed to add multiplier notes to roll event. Error: {e:#}"
+                                );
+                            }
+
+                            tracing::info!("added multiplier");
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to roll the dice. Error: {e:#}");
                         }
                     }
-                });
 
-                sleep(ROUND_TIMEOUT).await;
+                    tracing::info!("Sleeping");
+
+                    deadline.await;
+                }
+                Some(dice_roll) => {
+                    let note_id = dice_roll.get_note_id();
+                    tracing::warn!(
+                        note_id,
+                        "Can't start a new dice roll round, as there is still an active round."
+                    );
+                }
             }
-            Some(dice_roll) => {
-                let note_id = dice_roll.get_note_id();
-                tracing::warn!(
-                    note_id,
-                    "Can't start a new dice roll round, as there is still an active round."
-                );
-            }
-        }
+
+            Result::<()>::Ok(())
+        };
+
+        let exit = tokio::select! {
+            res = do_roll => ControlFlow::Continue(res?),
+            _ = &mut shutdown => {
+                tracing::warn!("Received Ctrl+C; ending round now...");
+                ControlFlow::Break(())
+            },
+        };
 
         let dice_roll = db::get_active_dice_roll(&db)?.expect("dice roll");
         tracing::info!(
@@ -258,6 +279,10 @@ pub async fn run_rounds(db: Db, dice_roller: DiceRoller) -> Result<()> {
         }
 
         db::remove_active_dice_roll(&db)?;
+
+        if exit.is_break() {
+            tracing::warn!("Exiting after Ctrl+C")
+        }
     }
 }
 
