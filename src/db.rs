@@ -18,6 +18,8 @@ pub struct Zap {
     pub note_id: String,
     // is some if the invoice was paid.
     pub receipt_id: Option<String>,
+    // is set if the bet one and has been paid out.
+    pub payout_id: Option<String>,
 }
 
 pub fn upsert_zap(db: &Db, payment_hash: String, zap: Zap) -> anyhow::Result<()> {

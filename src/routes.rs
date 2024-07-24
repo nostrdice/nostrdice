@@ -77,6 +77,7 @@ pub(crate) async fn get_invoice_impl(
             request: zap_request,
             note_id: zapped_note.to_bech32()?,
             receipt_id: None,
+            payout_id: None,
         };
         upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
     }
