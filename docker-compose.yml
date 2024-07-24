@@ -133,6 +133,7 @@ services:
     networks:
       - nostr-dice-network
     volumes:
+      - ./config/nwc-lnd-keys.json:/config/keys.json
       - ./testsetup.polar/volumes/lnd/alice/tls.cert:/config/tls.cert
       - ./testsetup.polar/volumes/lnd/alice/data/chain/bitcoin/regtest/admin.macaroon:/config/admin.macaroon
     working_dir: /app
@@ -140,6 +141,7 @@ services:
       - RUST_LOG=DEBUG
     command:
       - ./nostr-wallet-connect-lnd
+      - --keys-file=/config/keys.json
       - --relay=ws://nostr-rs-relay:8080
       - --lnd-host=alice
       - --lnd-port=10009
