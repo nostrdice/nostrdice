@@ -13,6 +13,7 @@ use nostr::EventBuilder;
 use nostr::Keys;
 use nostr::Marker;
 use nostr::Tag;
+use nostr::Timestamp;
 use nostr::ToBech32;
 use nostr_sdk::client::ZapDetails;
 use nostr_sdk::zapper::async_trait;
@@ -25,6 +26,7 @@ use sha2::Digest;
 use sha2::Sha256;
 use sled::Db;
 use std::fmt::Debug;
+use std::ops::Add;
 use std::time::Duration;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc;
@@ -89,6 +91,8 @@ impl DiceRoller {
             marker: Some(Marker::Mention),
         };
 
+        let expiry = Timestamp::now().add(60 * 5_u64);
+
         for multiplier in Multiplier::iter() {
             tokio::time::sleep(Duration::from_secs(20)).await;
             let event = EventBuilder::text_note(
@@ -98,7 +102,7 @@ impl DiceRoller {
                     multiplier.get_lower_than(),
                     dice_roll.get_note_id()
                 ),
-                [mention_event.clone()],
+                [mention_event.clone(), Tag::Expiration(expiry)],
             )
             .to_event(&self.keys)?;
 
