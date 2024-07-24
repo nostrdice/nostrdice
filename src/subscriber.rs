@@ -84,9 +84,9 @@ async fn handle_paid_invoice(
     client: Client,
 ) -> anyhow::Result<()> {
     let dice_roll = db::get_active_dice_roll(db)?.context("No active dice roll.")?;
-    let event_id = dice_roll.event_id;
+    let roll_event_id = dice_roll.event_id;
 
-    match get_zap(db, event_id, payment_hash.clone())? {
+    match get_zap(db, roll_event_id, payment_hash.clone())? {
         None => {
             tracing::warn!("Received a payment without bet.");
             Ok(())
@@ -135,7 +135,7 @@ async fn handle_paid_invoice(
             );
 
             zap.receipt_id = Some(event_id.to_bech32().expect("bech32"));
-            upsert_zap(db, event_id, payment_hash, zap)?;
+            upsert_zap(db, roll_event_id, payment_hash, zap)?;
 
             Ok(())
         }
