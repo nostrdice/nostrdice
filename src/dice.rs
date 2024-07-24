@@ -135,12 +135,13 @@ impl DiceRoller {
                     for winner in winners.iter() {
                         if winner.note_id == zap.note_id {
                             tracing::debug!("{} is a winner!", zap.roller);
-                            let amount_sat =
-                                ((zap.invoice.amount_milli_satoshis().expect("missing amount")
-                                    as f32
-                                    / 1000.0)
-                                    * winner.multiplier.get_multiplier())
-                                .floor() as u64;
+
+                            let invoice_amount =
+                                zap.invoice.amount_milli_satoshis().expect("missing amount");
+                            let amount_sat = calculate_price_money(
+                                invoice_amount,
+                                winner.multiplier.get_multiplier(),
+                            );
 
                             let zap_details = ZapDetails::new(ZapType::Public).message(
                                 format!(
@@ -170,6 +171,10 @@ impl DiceRoller {
 
         Ok(())
     }
+}
+
+pub fn calculate_price_money(amount_msat: u64, multiplier: f32) -> u64 {
+    ((amount_msat as f32 / 1000.0) * multiplier).floor() as u64
 }
 
 #[async_trait]
@@ -253,5 +258,20 @@ pub async fn run_rounds(db: Db, dice_roller: DiceRoller) -> Result<()> {
         }
 
         db::remove_active_dice_roll(&db)?;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::db::Multiplier;
+    use crate::dice::calculate_price_money;
+
+    #[test]
+    pub fn test_multipliers() {
+        let amount_msat = 1000_000;
+
+        let amount_sat = calculate_price_money(amount_msat, Multiplier::X1_05.get_multiplier());
+
+        assert_eq!((1000.0 * 1.05) as u64, amount_sat)
     }
 }
