@@ -18,7 +18,7 @@ The reason for this is that LND might not start up fast enough and messes with n
 
 ## Other useful commands
 
-### Get blockchain info 
+### Get blockchain info
 
 ```bash
 docker exec -it polar-n1-backend1 bitcoin-cli -rpccookiefile=/home/bitcoin/.bitcoin/regtest/.cookie -rpcport=18443 getblockchaininfo
@@ -40,7 +40,8 @@ docker exec -it alice lncli --macaroonpath=/home/lnd/.lnd/data/chain/bitcoin/reg
 
 ### Open channel
 
-Replace 
+Replace
+
 - `pubkey` with the counterparty pubkey
 - `counterparty` with the counterparty node address, e.g. `bob::9735`
 
