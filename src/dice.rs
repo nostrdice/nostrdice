@@ -82,7 +82,7 @@ impl DiceRoller {
         Ok(dice_roll)
     }
 
-    pub async fn add_multipliers(&self, mut dice_roll: DiceRoll) -> anyhow::Result<()> {
+    pub async fn add_multipliers(&self, db: &Db, mut dice_roll: DiceRoll) -> anyhow::Result<()> {
         let mention_event = Tag::Event {
             event_id: dice_roll.event_id,
             relay_url: None,
@@ -93,9 +93,10 @@ impl DiceRoller {
             tokio::time::sleep(Duration::from_secs(20)).await;
             let event = EventBuilder::text_note(
                 format!(
-                    "Win {} you zapped amount if the rolled number is lower than {}! nostr:{}",
-                    multiplier.get_content(),
+                    "Win {} the amount you zapped if the rolled number is lower than {}! nostr:{}",
                     multiplier.get_lower_than(),
+                    multiplier.get_content(),
+
                     dice_roll.get_note_id()
                 ),
                 [mention_event.clone()],
@@ -109,7 +110,9 @@ impl DiceRoller {
             dice_roll.multipliers.push(MultiplierNote {
                 multiplier,
                 note_id,
-            })
+            });
+
+            db::upsert_dice_roll(db, dice_roll.clone())?;
         }
 
         Ok(())
@@ -211,7 +214,7 @@ pub async fn run_rounds(db: Db, dice_roller: DiceRoller) -> Result<()> {
                                 // we already set the dice roll active since the multipliers will be
                                 // published with delays. this way the user doesn't have to wait for
                                 // all multiplier notes to be published before he can place a bet.
-                                if let Err(e) = dice_roller.add_multipliers(dice_roll).await {
+                                if let Err(e) = dice_roller.add_multipliers(&db, dice_roll).await {
                                     tracing::error!("Failed to add multiplier notes to roll event. Error: {e:#}");
                                 }
                             }
