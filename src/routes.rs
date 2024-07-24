@@ -177,7 +177,7 @@ pub async fn get_invoice(
         Err(e) => {
             tracing::error!("Failed to get invoice: {e:#}");
             Err(handle_anyhow_error(e))
-        },
+        }
     }
 }
 
