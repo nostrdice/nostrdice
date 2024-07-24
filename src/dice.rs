@@ -145,7 +145,7 @@ impl DiceRoller {
 
                             let zap_details = ZapDetails::new(ZapType::Public).message(
                                 format!(
-                                    "Won a {} on nostr dice!",
+                                    "Won a {} bet on nostr dice!",
                                     winner.multiplier.get_multiplier()
                                 )
                                 .to_string(),
