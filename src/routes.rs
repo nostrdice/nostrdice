@@ -56,9 +56,9 @@ pub(crate) async fn get_invoice_impl(
                 Some(multiplier_note) => (
                     sha256::Hash::hash(event.as_json().as_bytes()),
                     format!(
-                        "Nostr Dice {} bet on that the roll is lower than {}, nostr:{}",
-                        multiplier_note.multiplier.get_lower_than(),
+                        "You bet {} your amount on Nostr Dice that the roll is lower than {}, nostr:{}",
                         multiplier_note.multiplier.get_content(),
+                        multiplier_note.multiplier.get_lower_than(),
                         zapped_note_id
                     ),
                 ),

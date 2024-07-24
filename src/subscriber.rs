@@ -87,7 +87,10 @@ async fn handle_paid_invoice(
     let event_id = dice_roll.event_id;
 
     match get_zap(db, event_id, payment_hash.clone())? {
-        None => Ok(()),
+        None => {
+            tracing::warn!("Received a payment without bet.");
+            Ok(())
+        },
         Some(mut zap) => {
             if zap.receipt_id.is_some() {
                 return Ok(());

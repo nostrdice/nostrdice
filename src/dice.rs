@@ -94,9 +94,8 @@ impl DiceRoller {
             let event = EventBuilder::text_note(
                 format!(
                     "Win {} the amount you zapped if the rolled number is lower than {}! nostr:{}",
-                    multiplier.get_lower_than(),
                     multiplier.get_content(),
-
+                    multiplier.get_lower_than(),
                     dice_roll.get_note_id()
                 ),
                 [mention_event.clone()],
@@ -242,7 +241,7 @@ pub async fn run_rounds(db: Db, dice_roller: DiceRoller) -> Result<()> {
             "Closing the dice roll round."
         );
 
-        let zaps = db::get_all_zaps_by_event_id(&db, dice_roll.event_id)?;
+        let zaps = db::get_zaps_by_event_id(&db, dice_roll.event_id)?;
 
         let note_id = dice_roll.get_note_id();
         if let Err(e) = dice_roller.end_roll(dice_roll, zaps).await {

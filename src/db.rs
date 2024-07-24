@@ -39,7 +39,7 @@ pub fn upsert_zap(
     Ok(())
 }
 
-pub fn get_all_zaps_by_event_id(db: &Db, event_id: EventId) -> anyhow::Result<Vec<Zap>> {
+pub fn get_zaps_by_event_id(db: &Db, event_id: EventId) -> anyhow::Result<Vec<Zap>> {
     let zap_tree = db.open_tree(event_id.to_hex())?;
 
     let zaps = zap_tree
