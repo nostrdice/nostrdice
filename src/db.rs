@@ -128,9 +128,9 @@ impl Multiplier {
     pub fn get_content(&self) -> String {
         match self {
             Multiplier::X1_05 => "1.05x".to_string(),
-            Multiplier::X1_1 => "1_1x".to_string(),
-            Multiplier::X1_33 => "1_33x".to_string(),
-            Multiplier::X1_5 => "1_5x".to_string(),
+            Multiplier::X1_1 => "1.1x".to_string(),
+            Multiplier::X1_33 => "1.33x".to_string(),
+            Multiplier::X1_5 => "1.5x".to_string(),
             Multiplier::X2 => "2x".to_string(),
             Multiplier::X3 => "3x".to_string(),
             Multiplier::X10 => "10x".to_string(),
