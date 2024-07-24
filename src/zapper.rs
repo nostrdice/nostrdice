@@ -19,8 +19,13 @@ pub fn start_zapper(lnd: LndRouterClient) -> mpsc::Sender<PayInvoice> {
                     ..Default::default()
                 };
 
-                if let Err(e) = lnd.send_payment_v2(payment_request).await {
-                    tracing::error!("Failed to send payment. Error: {e:#}");
+                match lnd.send_payment_v2(payment_request).await {
+                    Ok(_resp) => {
+                        // TODO: update winner zap that it has been paid.
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to send payment. Error: {e:#}");
+                    }
                 }
             }
 

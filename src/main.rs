@@ -1,5 +1,6 @@
 use crate::config::*;
-use crate::dice::start_rounds;
+use crate::dice::run_rounds;
+use crate::dice::DiceRoller;
 use crate::dice::LndZapper;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
@@ -14,6 +15,8 @@ use axum::Router;
 use clap::Parser;
 use nostr::prelude::ToBech32;
 use nostr::Keys;
+use nostr_sdk::Client;
+use nostr_sdk::Options;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::from_reader;
@@ -23,6 +26,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::io::Write;
 use std::path::PathBuf;
+use std::time::Duration;
 use tokio::spawn;
 use tonic_openssl_lnd::lnrpc::GetInfoRequest;
 use tonic_openssl_lnd::lnrpc::GetInfoResponse;
@@ -48,6 +52,7 @@ pub struct State {
     pub keys: Keys,
     pub domain: String,
     pub route_hints: bool,
+    pub client: Client,
 }
 
 #[tokio::main]
@@ -58,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
 
     let relays = config.clone().relay;
 
-    let mut client = tonic_openssl_lnd::connect(
+    let mut lnd_client = tonic_openssl_lnd::connect(
         config.lnd_host.clone(),
         config.lnd_port,
         config.cert_file(),
@@ -67,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
     .await
     .expect("failed to connect");
 
-    let mut ln_client = client.lightning().clone();
+    let mut ln_client = lnd_client.lightning().clone();
     let lnd_info: GetInfoResponse = ln_client
         .get_info(GetInfoRequest {})
         .await
@@ -97,13 +102,30 @@ async fn main() -> anyhow::Result<()> {
 
     let keys = get_keys(keys_path);
 
+    let options = Options::default();
+    // Create new client
+    let client = Client::with_opts(
+        &keys,
+        options
+            .wait_for_send(true)
+            .send_timeout(Some(Duration::from_secs(20))),
+    );
+    client.add_relays(relays.clone()).await?;
+
+    let sender = start_zapper(lnd_client.router().clone());
+    let lnd_zapper = LndZapper { sender };
+
+    client.set_zapper(lnd_zapper).await;
+    client.connect().await;
+
     let state = State {
         db,
-        lightning_client: client.lightning().clone(),
-        router_client: client.router().clone(),
+        lightning_client: lnd_client.lightning().clone(),
+        router_client: lnd_client.router().clone(),
         keys: keys.clone(),
         domain: config.domain.clone(),
         route_hints: config.route_hints,
+        client: client.clone(),
     };
 
     let addr: std::net::SocketAddr = format!("{}:{}", config.bind, config.port)
@@ -131,15 +153,18 @@ async fn main() -> anyhow::Result<()> {
         state.db.clone(),
         state.lightning_client.clone(),
         keys.clone(),
-        relays.clone(),
+        client.clone(),
     ));
 
-    let sender = start_zapper(client.router().clone());
-    let lnd_zapper = LndZapper { sender };
-
-    spawn(async move {
-        if let Err(e) = start_rounds(state.db.clone(), keys, relays, lnd_zapper).await {
-            tracing::error!("Stopped rolling dice: {e:#}");
+    // TODO: add a way to stop a round, so we do not accidentally stop a round with active bets on
+    // them.
+    spawn({
+        let client = client.clone();
+        async move {
+            let dice_roller = DiceRoller::new(client.clone(), keys.clone());
+            if let Err(e) = run_rounds(state.db.clone(), dice_roller).await {
+                tracing::error!("Stopped rolling dice: {e:#}");
+            }
         }
     });
 
@@ -153,6 +178,8 @@ async fn main() -> anyhow::Result<()> {
     if let Err(e) = graceful.await {
         tracing::error!("shutdown error: {}", e);
     }
+
+    client.disconnect().await?;
 
     Ok(())
 }
