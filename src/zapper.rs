@@ -20,7 +20,7 @@ pub fn start_zapper(lnd: LndRouterClient) -> mpsc::Sender<PayInvoice> {
                 };
 
                 match lnd.send_payment_v2(payment_request).await {
-                    Ok(resp) => {
+                    Ok(_resp) => {
                         // TODO: update winner zap that it has been paid.
                     }
                     Err(e) => {

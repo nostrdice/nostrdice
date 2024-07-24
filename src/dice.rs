@@ -267,11 +267,39 @@ mod tests {
     use crate::dice::calculate_price_money;
 
     #[test]
-    pub fn test_multipliers() {
-        let amount_msat = 1000_000;
+    pub fn test_multipliers_1_05() {
+        let amount_msat = 1_000_000;
 
         let amount_sat = calculate_price_money(amount_msat, Multiplier::X1_05.get_multiplier());
 
         assert_eq!((1000.0 * 1.05) as u64, amount_sat)
+    }
+
+    #[test]
+    pub fn test_multipliers_1_1() {
+        let amount_msat = 1_000_000;
+
+        let amount_sat = calculate_price_money(amount_msat, Multiplier::X1_1.get_multiplier());
+
+        assert_eq!((1000.0 * 1.1) as u64, amount_sat)
+    }
+
+    #[test]
+    pub fn test_multipliers_1_5() {
+        let amount_msat = 1_000_000;
+
+        let amount_sat = calculate_price_money(amount_msat, Multiplier::X1_5.get_multiplier());
+
+        assert_eq!((1000.0 * 1.5) as u64, amount_sat)
+    }
+
+
+    #[test]
+    pub fn test_multipliers_2() {
+        let amount_msat = 1_000_000;
+
+        let amount_sat = calculate_price_money(amount_msat, Multiplier::X2.get_multiplier());
+
+        assert_eq!((1000.0 * 2.0) as u64, amount_sat)
     }
 }
