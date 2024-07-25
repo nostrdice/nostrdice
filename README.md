@@ -32,16 +32,22 @@ docker build --no-cache -t nostr-dice .
 
 ## To test the flow
 
-You will need a nostr client e.g. [`algia`](https://github.com/mattn/algia).
-From now on we assume that you use `algia`, but other clients should work as long as you can configure the relay, nsec and NWC settings.
+You will need a nostr client e.g. [`algia`].
+To install our slightly modified version of `algia` you can use if you have [`go`](https://go.dev/) in your path:
+
+```bash
+go install github.com/holzeis/algia@fb12226618fdb2de03084c4eb7fa7f8ed887e0fc
+```
+
+From this point onwards we assume that you use `algia`, but other clients should work as long as you can configure the relay, nsec and NWC settings.
 
 You will need to configure your client to use the expected relay, nsec and NWC settings.
-To do so, copy [this configuration file](./roller-config.json) to `~/.config/algia/roller-config.json`.
+To do so, copy [this configuration file](./alice-config.json) to `~/.config/algia/alice-config.json`.
 
 Find your multiplier:
 
 ```
-~ algia -a roller search
+~ algia -a alice search
 npub130nwn4t5x8h0h6d983lfs2x44znvqezucklurjzwtn7cv0c73cxsjemx32: note1gsc66mle93sqfj8k96qj63pkma7ume6vruywkk84jee6hwkualzsynp02d
 Win 1.05x the amount you zapped if the rolled number is lower than 60541! nostr:note17fh4dpcf4n5624hynj6nge7ehmawe24djqrr00ks8z9x3w8tm6nqezwcga
 ```
@@ -49,7 +55,7 @@ Win 1.05x the amount you zapped if the rolled number is lower than 60541! nostr:
 Zap one of the latest notes:
 
 ```
-algia -a roller zap --amount 50000 note1gsc66mle93sqfj8k96qj63pkma7ume6vruywkk84jee6hwkualzsynp02d
+algia -a alice zap --amount 50000 note1gsc66mle93sqfj8k96qj63pkma7ume6vruywkk84jee6hwkualzsynp02d
 ```
 
 Wait about a minute and check if the roller's LND got paid.
