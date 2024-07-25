@@ -1,6 +1,6 @@
 FROM ubuntu:22.04
 
-ARG BINARY=target/debug/nostr-dice
+ARG BINARY=target/release/nostr-dice
 
 RUN apt-get update && \
     apt-get install ca-certificates -y
