@@ -4,12 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_call:
-    inputs:
-      tag:
-        required: true
-        description: "The branch, tag or SHA to checkout."
-        type: string
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
