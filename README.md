@@ -20,14 +20,14 @@ just all
 - `docker compose`.
 - [`just`](https://github.com/casey/just).
 - [`nostr-tool`](https://github.com/0xtrr/nostr-tool).
+  - `cargo install nostr-tool`
 
 ### To test new changes to nostrdice
 
 Build the crate and the docker image:
 
 ```bash
-cargo build
-docker build --no-cache -t nostr-dice .
+docker-compose --build up -d
 ```
 
 ## To test the flow

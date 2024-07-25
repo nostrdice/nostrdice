@@ -13,7 +13,7 @@ docker:
     sleep 2
 
     # Start all the other containers
-    docker compose up -d
+    docker compose up --build -d
 
     # Update nostrdice's CA certificates so that nostrdice can trust the roller's self-signed certificate
     docker exec -u 0 -it nostrdice update-ca-certificates

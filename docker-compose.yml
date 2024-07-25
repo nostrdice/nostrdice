@@ -97,7 +97,9 @@ services:
       - nostr-dice-network
 
   nostrdice:
-    image: nostr-dice # TODO: Should point to ghcr.io
+    build:
+      context: .
+      dockerfile: Dockerfile.build
     container_name: nostrdice
     depends_on:
       - nostr-rs-relay
