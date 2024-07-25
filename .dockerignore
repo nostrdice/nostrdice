@@ -1,5 +1,6 @@
 ./target
 !./target/debug/nostr-dice
+!./target/release/nostr-dice
 ./testsetup.polar
 .idea
 .git
