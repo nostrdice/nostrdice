@@ -12,7 +12,6 @@ use axum::Extension;
 use axum::Json;
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash;
-use bitcoin::secp256k1::ThirtyTwoByteHash;
 use lightning_invoice::Bolt11Invoice;
 use lnurl::pay::PayResponse;
 use lnurl::Tag;
@@ -21,6 +20,7 @@ use nostr::Event;
 use nostr::EventId;
 use nostr::JsonUtil;
 use nostr::ToBech32;
+use nostr_sdk::TagStandard;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -71,7 +71,7 @@ pub(crate) async fn get_invoice_impl(
 
     let request = lnrpc::Invoice {
         value_msat: amount_msats as i64,
-        description_hash: desc_hash.into_32().to_vec(),
+        description_hash: desc_hash.to_byte_array().to_vec(),
         // TODO: expire when the round ends.
         expiry: 60 * 5,
         memo,
@@ -86,8 +86,8 @@ pub(crate) async fn get_invoice_impl(
         let tags = zap_request.tags();
         let tags = tags
             .iter()
-            .filter_map(|tag| match tag {
-                event::Tag::Event { event_id, .. } => Some(*event_id),
+            .filter_map(|tag| match tag.as_standardized() {
+                Some(TagStandard::Event { event_id, .. }) => Some(*event_id),
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -119,8 +119,8 @@ fn get_note_id(zap_request: &Event) -> anyhow::Result<EventId> {
     let tags = zap_request.tags();
     let tags = tags
         .iter()
-        .filter_map(|tag| match tag {
-            event::Tag::Event { event_id, .. } => Some(*event_id),
+        .filter_map(|tag| match tag.as_standardized() {
+            Some(event::TagStandard::Event { event_id, .. }) => Some(*event_id),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -193,6 +193,9 @@ pub async fn get_lnurl_pay(
     let hash = sha256::Hash::hash(metadata.as_bytes());
     let callback = format!("https://{}/get-invoice/{}", state.domain, hex::encode(hash));
 
+    let pk = state.keys.public_key();
+    let pk = bitcoin::key::XOnlyPublicKey::from_slice(&pk.serialize()).expect("valid PK");
+
     let resp = PayResponse {
         callback,
         min_sendable: 1_000,
@@ -201,7 +204,7 @@ pub async fn get_lnurl_pay(
         metadata,
         comment_allowed: None,
         allows_nostr: Some(true),
-        nostr_pubkey: Some(*state.keys.public_key()),
+        nostr_pubkey: Some(pk),
     };
 
     Ok(Json(resp))

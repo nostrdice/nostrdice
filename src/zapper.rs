@@ -12,6 +12,8 @@ pub fn start_zapper(lnd: LndRouterClient) -> mpsc::Sender<PayInvoice> {
         let mut lnd = lnd.clone();
         async move {
             while let Some(pay_invoice) = receiver.recv().await {
+                tracing::debug!("Zap payment request: {:?}", pay_invoice);
+
                 let payment_request = SendPaymentRequest {
                     payment_request: pay_invoice.0,
                     timeout_seconds: 60,

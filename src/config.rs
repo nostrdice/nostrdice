@@ -35,10 +35,13 @@ pub struct Config {
     #[clap(long)]
     /// Include route hints in invoices
     pub route_hints: bool,
-
     #[arg(num_args(0..))]
     #[clap(long)]
     pub relay: Vec<String>,
+    #[clap(default_value_t = 60, long)]
+    pub round_interval_seconds: u32,
+    #[clap(default_value_t = 0, long)]
+    pub multiplier_gap_seconds: u32,
 }
 
 impl Config {
