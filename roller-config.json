@@ -1,0 +1,13 @@
+{
+  "relays": {
+    "ws://localhost:7000": {
+      "read": true,
+      "write": true,
+      "search": false
+    }
+  },
+  "follows": {},
+  "privatekey": "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5",
+  "nwc-uri": "nostr+walletconnect://215920a9c3a5ea322300fb17b44ed3cd4e510c418d16fc4fb08d4be1d08613f3?relay=ws%3A%2F%2Flocalhost%3A7000\u0026secret=acd6926db53b8c1fd5289d0c8d6de98b19a8ae5179adb374142edd14594633cc",
+  "nwc-pub": "e42c8a62a1d0a1235bcc4f5a79030907083f8078066420c3c6d05faf564e399e"
+}

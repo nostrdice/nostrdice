@@ -5,35 +5,31 @@ use crate::db::MultiplierNote;
 use crate::db::Zap;
 use crate::zapper::PayInvoice;
 use anyhow::Result;
-use bitcoin::hashes::sha256;
 use bitcoin::secp256k1::rand;
-use nostr::hashes::Hash;
+use nostr::bitcoin::hashes::sha256;
+use nostr::bitcoin::hashes::HashEngine;
+use nostr::nips::nip10::Marker;
 use nostr::prelude::ZapType;
 use nostr::EventBuilder;
 use nostr::Keys;
-use nostr::Marker;
 use nostr::Tag;
 use nostr::Timestamp;
 use nostr::ToBech32;
 use nostr_sdk::client::ZapDetails;
+use nostr_sdk::hashes::Hash;
 use nostr_sdk::zapper::async_trait;
 use nostr_sdk::Client;
 use nostr_sdk::NostrZapper;
+use nostr_sdk::TagStandard;
 use nostr_sdk::ZapperBackend;
 use nostr_sdk::ZapperError;
 use rand::Rng;
-use sha2::Digest;
-use sha2::Sha256;
 use sled::Db;
 use std::fmt::Debug;
 use std::ops::Add;
 use std::time::Duration;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc;
-use tokio::time::sleep;
-
-// a new round every five minutes
-const ROUND_TIMEOUT: Duration = Duration::from_secs(60 * 5);
 
 #[derive(Clone, Debug)]
 pub struct LndZapper {
@@ -60,16 +56,16 @@ impl DiceRoller {
             (roll, nonce)
         };
 
-        let mut hasher = Sha256::new();
-        hasher.update(roll.to_le_bytes());
-        hasher.update(nonce.to_le_bytes());
-        let commitment = hasher.finalize();
+        let mut hasher = sha256::Hash::engine();
 
-        let commitment = sha256::Hash::hash(&commitment);
+        hasher.input(&roll.to_le_bytes());
+        hasher.input(&nonce.to_le_bytes());
+
+        let commitment = sha256::Hash::from_engine(hasher);
 
         let event = EventBuilder::text_note(
             format!("We rolled the dice! Place your bet on the reply posts by zapping the amount. \nThis is the sha256 commitment: {}", commitment),
-            [Tag::Sha256(commitment)],
+            [Tag::from_standardized(TagStandard::Sha256(commitment))],
         ).to_event(&self.keys)?;
 
         let event_id = self.client.send_event(event.clone()).await?;
@@ -84,17 +80,22 @@ impl DiceRoller {
         Ok(dice_roll)
     }
 
-    pub async fn add_multipliers(&self, db: &Db, mut dice_roll: DiceRoll) -> anyhow::Result<()> {
-        let mention_event = Tag::Event {
+    pub async fn add_multipliers(
+        &self,
+        db: &Db,
+        mut dice_roll: DiceRoll,
+        gap: Duration,
+    ) -> anyhow::Result<()> {
+        let mention_event = Tag::from_standardized(TagStandard::Event {
             event_id: dice_roll.event_id,
             relay_url: None,
             marker: Some(Marker::Mention),
-        };
+        });
 
         let expiry = Timestamp::now().add(60 * 5_u64);
 
         for multiplier in Multiplier::iter() {
-            tokio::time::sleep(Duration::from_secs(20)).await;
+            tokio::time::sleep(gap).await;
             let event = EventBuilder::text_note(
                 format!(
                     "Win {} the amount you zapped if the rolled number is lower than {}! nostr:{}",
@@ -102,7 +103,10 @@ impl DiceRoller {
                     multiplier.get_lower_than(),
                     dice_roll.get_note_id()
                 ),
-                [mention_event.clone(), Tag::Expiration(expiry)],
+                [
+                    mention_event.clone(),
+                    Tag::from_standardized(TagStandard::Expiration(expiry)),
+                ],
             )
             .to_event(&self.keys)?;
 
@@ -193,47 +197,52 @@ impl NostrZapper for LndZapper {
     }
 }
 
-pub async fn run_rounds(db: Db, dice_roller: DiceRoller) -> Result<()> {
+pub async fn run_rounds(
+    db: Db,
+    dice_roller: DiceRoller,
+    round_interval: Duration,
+    multiplier_publication_gap: Duration,
+) -> Result<()> {
     loop {
         match db::get_active_dice_roll(&db)? {
             None => {
-                tokio::spawn({
-                    let dice_roller = dice_roller.clone();
-                    let db = db.clone();
-                    async move {
-                        match dice_roller.start_roll().await {
-                            Ok(dice_roll) => {
-                                let note_id = dice_roll.get_note_id();
-                                tracing::info!("Started new round with note id: {}", note_id);
-                                if let Err(e) = db::set_active_dice_roll(&db, dice_roll.event_id) {
-                                    tracing::error!(
-                                        note_id,
-                                        "Failed to set dice roll active. Error: {e:#}"
-                                    );
-                                }
+                let mut interval = tokio::time::interval(round_interval);
 
-                                if let Err(e) = db::upsert_dice_roll(&db, dice_roll.clone()) {
-                                    tracing::error!(
-                                        note_id,
-                                        "Failed to upsert dice roll. Error: {e:#}"
-                                    );
-                                }
+                interval.tick().await;
 
-                                // we already set the dice roll active since the multipliers will be
-                                // published with delays. this way the user doesn't have to wait for
-                                // all multiplier notes to be published before he can place a bet.
-                                if let Err(e) = dice_roller.add_multipliers(&db, dice_roll).await {
-                                    tracing::error!("Failed to add multiplier notes to roll event. Error: {e:#}");
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to roll the dice. Error: {e:#}");
-                            }
+                match dice_roller.start_roll().await {
+                    Ok(dice_roll) => {
+                        let note_id = dice_roll.get_note_id();
+                        tracing::info!("Started new round with note id: {}", note_id);
+                        if let Err(e) = db::set_active_dice_roll(&db, dice_roll.event_id) {
+                            tracing::error!(
+                                note_id,
+                                "Failed to set dice roll active. Error: {e:#}"
+                            );
+                        }
+
+                        if let Err(e) = db::upsert_dice_roll(&db, dice_roll.clone()) {
+                            tracing::error!(note_id, "Failed to upsert dice roll. Error: {e:#}");
+                        }
+
+                        // we already set the dice roll active since the multipliers will be
+                        // published with delays. this way the user doesn't have to wait for
+                        // all multiplier notes to be published before he can place a bet.
+                        if let Err(e) = dice_roller
+                            .add_multipliers(&db, dice_roll, multiplier_publication_gap)
+                            .await
+                        {
+                            tracing::error!(
+                                "Failed to add multiplier notes to roll event. Error: {e:#}"
+                            );
                         }
                     }
-                });
+                    Err(e) => {
+                        tracing::error!("Failed to roll the dice. Error: {e:#}");
+                    }
+                }
 
-                sleep(ROUND_TIMEOUT).await;
+                interval.tick().await;
             }
             Some(dice_roll) => {
                 let note_id = dice_roll.get_note_id();
@@ -292,7 +301,6 @@ mod tests {
 
         assert_eq!((1000.0 * 1.5) as u64, amount_sat)
     }
-
 
     #[test]
     pub fn test_multipliers_2() {

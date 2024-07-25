@@ -2,7 +2,6 @@ use crate::db;
 use crate::db::get_zap;
 use crate::db::upsert_zap;
 use anyhow::Context;
-use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
@@ -97,11 +96,13 @@ async fn handle_paid_invoice(
             }
 
             let preimage = zap.request.id.to_bytes();
-            let invoice_hash = Sha256::hash(&preimage);
+            let invoice_hash = bitcoin::hashes::sha256::Hash::hash(&preimage);
 
             let payment_secret = zap.request.id.to_bytes();
 
-            let private_key = SecretKey::from_hashed_data::<Sha256>(zap.request.id.as_bytes());
+            let private_key = SecretKey::from_hashed_data::<bitcoin::hashes::sha256::Hash>(
+                zap.request.id.as_bytes(),
+            );
 
             let amt_msats = zap
                 .invoice
@@ -123,7 +124,7 @@ async fn handle_paid_invoice(
             let event = EventBuilder::zap_receipt(
                 fake_invoice.to_string(),
                 Some(hex::encode(preimage)),
-                zap.request.clone(),
+                &zap.request.clone(),
             )
             .to_event(&keys)?;
 

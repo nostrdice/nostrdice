@@ -162,7 +162,14 @@ async fn main() -> anyhow::Result<()> {
         let client = client.clone();
         async move {
             let dice_roller = DiceRoller::new(client.clone(), keys.clone());
-            if let Err(e) = run_rounds(state.db.clone(), dice_roller).await {
+            if let Err(e) = run_rounds(
+                state.db.clone(),
+                dice_roller,
+                Duration::from_secs(config.round_interval_seconds as u64),
+                Duration::from_secs(config.multiplier_gap_seconds as u64),
+            )
+            .await
+            {
                 tracing::error!("Stopped rolling dice: {e:#}");
             }
         }
