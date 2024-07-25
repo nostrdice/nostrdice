@@ -20,3 +20,6 @@ Cargo.lock
 
 # ignore polar data
 testsetup.polar
+
+data
+data-roller-lnurl-server

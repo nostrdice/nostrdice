@@ -4,3 +4,8 @@
 ./testsetup.polar
 .idea
 .git
+zaps.db
+config
+.github
+data
+data-roller-lnurl-server
