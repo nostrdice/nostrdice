@@ -19,6 +19,6 @@ RUN cargo build --release --bin nostr-dice
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 # We do not need openssl to run the bin
-RUN apt-get update && apt install -y openssl
+RUN apt-get update && apt install -y openssl ca-certificates
 COPY --from=builder /app/target/release/nostr-dice /usr/local/nostr-dice
 ENTRYPOINT ["/usr/local/nostr-dice"]
