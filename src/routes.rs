@@ -45,14 +45,11 @@ pub(crate) async fn get_invoice_impl(
                 return Err(anyhow!("Invalid zap request"));
             }
 
-            let dice_roll = db::get_active_dice_roll(&state.db)?
-                .context("No active dice roll at the moment!")?;
-
             // TODO: check if the user has a lightning address configured
 
             let zapped_note_id = get_note_id(event)?.to_bech32().expect("to fit");
 
-            match dice_roll.get_multiplier_note(zapped_note_id.clone()) {
+            match state.multipliers.get_multiplier_note(&zapped_note_id) {
                 Some(multiplier_note) => (
                     sha256::Hash::hash(event.as_json().as_bytes()),
                     format!(
@@ -69,6 +66,7 @@ pub(crate) async fn get_invoice_impl(
         }
     };
 
+    // TODO: Must commit to a lot more things to avoid forged fraud proofs.
     let request = lnrpc::Invoice {
         value_msat: amount_msats as i64,
         description_hash: desc_hash.to_byte_array().to_vec(),
@@ -81,6 +79,7 @@ pub(crate) async fn get_invoice_impl(
 
     let resp = lnd.add_invoice(request).await?.into_inner();
 
+    // TODO: Combine the branches.
     if let Some(zap_request) = zap_request {
         let invoice = Bolt11Invoice::from_str(&resp.payment_request)?;
         let tags = zap_request.tags();
@@ -101,15 +100,15 @@ pub(crate) async fn get_invoice_impl(
             roller: zap_request.pubkey,
             invoice,
             request: zap_request.clone(),
-            note_id: zapped_note.to_bech32()?,
+            multiplier_note_id: zapped_note.to_bech32()?,
             receipt_id: None,
             payout_id: None,
         };
 
-        let dice_roll =
-            db::get_active_dice_roll(&state.db)?.context("No active dice roll at the moment!")?;
+        let round =
+            db::get_current_round(&state.db)?.context("No active dice roll at the moment!")?;
 
-        upsert_zap(&state.db, dice_roll.event_id, hex::encode(resp.r_hash), zap)?;
+        upsert_zap(&state.db, round.event_id, hex::encode(resp.r_hash), zap)?;
     }
 
     Ok(resp.payment_request)

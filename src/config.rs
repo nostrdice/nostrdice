@@ -40,8 +40,9 @@ pub struct Config {
     pub relay: Vec<String>,
     #[clap(default_value_t = 60, long)]
     pub round_interval_seconds: u32,
-    #[clap(default_value_t = 0, long)]
-    pub multiplier_gap_seconds: u32,
+    /// This config file is expected to be located in the `data_dir`.
+    #[clap(default_value_t = String::from("multipliers.yml"), long)]
+    pub multiplier_config_file: String,
 }
 
 impl Config {

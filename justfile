@@ -9,7 +9,8 @@ all:
     just create-nostr-profiles
 
 docker:
-    docker compose up alice bob -d
+    docker compose up alice bob nostr-rs-relay -d
+
     sleep 2
 
     # Start all the other containers
@@ -100,3 +101,19 @@ wait-until-balance-grows-by node startingBalance increase:
 
     echo "Roller did not win :( Probably something went wrong"
     exit 1
+
+nostr-dice-post-multipliers:
+    just nostrdice-post-multiplier 1.05 60541
+    just nostrdice-post-multiplier 1.1 57789
+    just nostrdice-post-multiplier 1.33 47796
+    just nostrdice-post-multiplier 1.5 42379
+    just nostrdice-post-multiplier 2 31784
+    just nostrdice-post-multiplier 3 21189
+    just nostrdice-post-multiplier 10 6356
+    just nostrdice-post-multiplier 25 2542
+    just nostrdice-post-multiplier 50 1271
+    just nostrdice-post-multiplier 100 635
+    just nostrdice-post-multiplier 1000 64
+
+nostrdice-post-multiplier multiplier threshold:
+    nostr-tool -p nsec1r8q685ht0t8986l37hj7u3xtysjk840f0p3ed77wv04mwn6l20mqtjg99g -r ws://localhost:7000 text-note --content 'Win {{multiplier}}x the amount you zapped if the rolled number is lower than {{threshold}}!'
