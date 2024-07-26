@@ -10,11 +10,11 @@
 //! User claims they are owed zap_amount * multiplier
 //!
 //! - amount
-//! - description/m: nonce commitment noteId, nonce commitment, multiplier note id, roller's npub, memo
+//! - description/m: nonce commitment noteId, nonce commitment, multiplier note id, roller's npub,
+//!   memo
 //! - signature proves that we approved this zap request
 //!
 //! ## payout invoice
-//!
 
 use crate::db;
 use crate::db::Round;
@@ -128,7 +128,29 @@ impl RoundManager {
                             "{roller} was aiming for <{threshold}, and they got {roll}"
                         );
 
+                        // the send_private_message function (NIP17) seems to be not supported by major nostr clients.
+                        #[allow(deprecated)]
+                        if let Err(e) = self.client.send_direct_msg(roller, format!("You lost. You rolled {roll}, which was bigger than {threshold}. Try again!"), None).await {
+                            tracing::error!(%roller, "Failed to send private message. Error: {e:#}");
+                        }
+
                         continue;
+                    }
+
+                    // the send_private_message function (NIP17) seems to be not supported by major nostr clients.
+                    #[allow(deprecated)]
+                    if let Err(e) = self
+                        .client
+                        .send_direct_msg(
+                            roller,
+                            format!(
+                                "You won. You rolled {roll}, which was lower than {threshold}."
+                            ),
+                            None,
+                        )
+                        .await
+                    {
+                        tracing::error!(%roller, "Failed to send private message. Error: {e:#}");
                     }
 
                     tracing::info!("{roller} is a winner!");
