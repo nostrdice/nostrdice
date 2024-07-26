@@ -63,7 +63,7 @@ test:
 
     echo "Zapping note $multiplierNote"
 
-    algia -a alice zap --amount=50000 $multiplierNote 2> /dev/null
+    algia -a alice zap --amount=50000 --comment=foo $multiplierNote 2> /dev/null
 
     # Assuming 0 routing fees.
     just wait-until-balance-grows-by alice $balanceBefore 2499

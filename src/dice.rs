@@ -1,9 +1,28 @@
+//! - no instant payout
+//!
+//! - publish multiplier notes once
+//! - announce commitment and nonce reveal on different account
+//!
+//! roll = first_2_bytes_in_decimal(sha256(nonce | npub | memo))
+//!
+//! ## zap invoice
+//!
+//! User claims they are owed zap_amount * multiplier
+//!
+//! - amount
+//! - description/m: nonce commitment noteId, nonce commitment, multiplier note id, roller's npub, memo
+//! - signature proves that we approved this zap request
+//!
+//! ## payout invoice
+//!
+
 use crate::db;
 use crate::db::DiceRoll;
 use crate::db::Multiplier;
 use crate::db::MultiplierNote;
 use crate::db::Zap;
 use crate::zapper::PayInvoice;
+use anyhow::Context;
 use anyhow::Result;
 use bitcoin::secp256k1::rand;
 use nostr::bitcoin::hashes::sha256;
@@ -20,10 +39,13 @@ use nostr_sdk::hashes::Hash;
 use nostr_sdk::zapper::async_trait;
 use nostr_sdk::Client;
 use nostr_sdk::NostrZapper;
+use nostr_sdk::PublicKey;
 use nostr_sdk::TagStandard;
 use nostr_sdk::ZapperBackend;
 use nostr_sdk::ZapperError;
+use rand::thread_rng;
 use rand::Rng;
+use rand::SeedableRng;
 use sled::Db;
 use std::fmt::Debug;
 use std::ops::Add;
@@ -48,30 +70,28 @@ impl DiceRoller {
     }
 
     pub async fn start_roll(&self) -> Result<DiceRoll> {
-        let (roll, nonce) = {
-            let mut rng = rand::thread_rng();
-            let roll = rng.gen_range(u16::MIN..=u16::MAX);
-            let nonce = rng.gen_range(u64::MIN..=u64::MAX);
-
-            (roll, nonce)
-        };
+        let mut rng = rand::rngs::StdRng::from_rng(thread_rng()).expect("rng");
+        let nonce: [u8; 32] = rng.gen();
 
         let mut hasher = sha256::Hash::engine();
-
-        hasher.input(&roll.to_le_bytes());
-        hasher.input(&nonce.to_le_bytes());
+        hasher.input(&nonce);
 
         let commitment = sha256::Hash::from_engine(hasher);
 
-        let event = EventBuilder::text_note(
-            format!("We rolled the dice! Place your bet on the reply posts by zapping the amount. \nThis is the sha256 commitment: {}", commitment),
-            [Tag::from_standardized(TagStandard::Sha256(commitment))],
-        ).to_event(&self.keys)?;
+        tracing::debug!("Generated commitment: {commitment}");
 
-        let event_id = self.client.send_event(event.clone()).await?;
+        let event = EventBuilder::text_note(
+            format!("A new NostrDice round has started! Zap the note with your chosen multiplier.\nHere is the SHA256 commitment which makes the game fair: {}", commitment),
+            [Tag::from_standardized(TagStandard::Sha256(commitment))],
+        ).to_event(&self.keys).context("whoops")?;
+
+        let event_id = self
+            .client
+            .send_event(event.clone())
+            .await
+            .context("oh no")?;
 
         let dice_roll = DiceRoll {
-            roll,
             nonce,
             event_id,
             multipliers: vec![],
@@ -126,49 +146,81 @@ impl DiceRoller {
     }
 
     pub async fn end_roll(&self, dice_roll: DiceRoll, zaps: Vec<Zap>) -> anyhow::Result<()> {
-        let winners = dice_roll
-            .multipliers
-            .into_iter()
-            .filter(|m| m.multiplier.get_lower_than() > dice_roll.roll)
-            .collect::<Vec<_>>();
-        tracing::debug!("[{}], And the winners are {winners:?}.", dice_roll.roll);
+        tracing::info!("Time to roll the dice");
 
         for zap in zaps {
-            match zap.receipt_id {
-                Some(_) => {
-                    for winner in winners.iter() {
-                        if winner.note_id == zap.note_id {
-                            tracing::debug!("{} is a winner!", zap.roller);
+            match zap {
+                Zap {
+                    roller,
+                    invoice,
+                    note_id,
+                    request,
+                    receipt_id: Some(_),
+                    ..
+                } => {
+                    let roll = generate_roll(dice_roll.nonce, roller, request.content.clone());
 
-                            let invoice_amount =
-                                zap.invoice.amount_milli_satoshis().expect("missing amount");
-                            let amount_sat = calculate_price_money(
-                                invoice_amount,
-                                winner.multiplier.get_multiplier(),
-                            );
-
-                            let zap_details = ZapDetails::new(ZapType::Public).message(
-                                format!(
-                                    "Won a {} bet on nostr dice!",
-                                    winner.multiplier.get_multiplier()
-                                )
-                                .to_string(),
-                            );
-                            if let Err(e) = self
-                                .client
-                                .zap(zap.roller, amount_sat, Some(zap_details))
-                                .await
-                            {
-                                tracing::error!("Failed to zap {}. Error: {e:#}", zap.roller);
-
-                                // TODO: Send a message to the user that we have not been able to
-                                // payout.
-                            }
+                    // TODO: This will change once we use static multiplier notes.
+                    let multiplier = match dice_roll
+                        .multipliers
+                        .iter()
+                        .find(|note| note.note_id == note_id)
+                    {
+                        Some(note) => &note.multiplier,
+                        None => {
+                            tracing::warn!("Zap does not correspond to this round");
+                            continue;
                         }
+                    };
+
+                    let threshold = multiplier.get_lower_than();
+                    if roll >= threshold {
+                        tracing::debug!("{roller} did not win this time");
+                        tracing::debug!(
+                            "{roller} was aiming for <{threshold}, and they got {roll}"
+                        );
+
+                        continue;
+                    }
+
+                    tracing::info!("{roller} is a winner!");
+                    tracing::debug!("{roller} was aiming for <{threshold}, and they got {roll}");
+
+                    let zap_amount_msat = invoice
+                        .amount_milli_satoshis()
+                        .expect("amount to be present");
+                    let amount_sat =
+                        calculate_price_money(zap_amount_msat, multiplier.get_multiplier());
+
+                    tracing::debug!(
+                        "Sending {} * {} = {amount_sat} to {roller} for hitting a {} multiplier",
+                        zap_amount_msat / 1_000,
+                        multiplier.get_multiplier(),
+                        multiplier.get_content()
+                    );
+
+                    let zap_details = ZapDetails::new(ZapType::Public).message(
+                        format!("Won a {} bet on NostrDice!", multiplier.get_multiplier())
+                            .to_string(),
+                    );
+
+                    if let Err(e) = self
+                        .client
+                        .zap(zap.roller, amount_sat, Some(zap_details))
+                        .await
+                    {
+                        tracing::error!("Failed to zap {}. Error: {e:#}", zap.roller);
+
+                        // TODO: Send a message to the user that we have not been able to
+                        // payout.
                     }
                 }
-                None => {
-                    tracing::debug!("Skipping {}. Reason: Did not pay the invoice.", zap.roller);
+                Zap {
+                    roller,
+                    receipt_id: None,
+                    ..
+                } => {
+                    tracing::debug!("Skipping {roller} because they did not pay zap invoice");
                 }
             }
         }
@@ -204,7 +256,7 @@ pub async fn run_rounds(
     multiplier_publication_gap: Duration,
 ) -> Result<()> {
     loop {
-        match db::get_active_dice_roll(&db)? {
+        match db::get_active_dice_roll(&db).context("Failed to get active dice roll")? {
             None => {
                 let mut interval = tokio::time::interval(round_interval);
 
@@ -270,10 +322,56 @@ pub async fn run_rounds(
     }
 }
 
+fn generate_roll(nonce: [u8; 32], roller_npub: PublicKey, memo: String) -> u16 {
+    let mut hasher = sha256::Hash::engine();
+
+    let nonce = hex::encode(nonce);
+    let nonce = nonce.as_bytes();
+
+    let roller_npub = roller_npub.to_bech32().expect("valid npub");
+    let roller_npub = roller_npub.as_bytes();
+
+    let memo = memo.as_bytes();
+
+    hasher.input(nonce);
+    hasher.input(roller_npub);
+    hasher.input(memo);
+
+    let roll = sha256::Hash::from_engine(hasher);
+    let roll = roll.to_byte_array();
+
+    let roll = hex::encode(roll);
+
+    dbg!(&roll);
+
+    let roll = roll.get(0..4).expect("long enough");
+
+    u16::from_str_radix(roll, 16).expect("valid hex")
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::db::Multiplier;
     use crate::dice::calculate_price_money;
+    use crate::dice::generate_roll;
+
+    #[test]
+    /// You can verify the outcome by visiting this URL:
+    /// https://emn178.github.io/online-tools/sha256.html?input=0000000000000000000000000000000000000000000000000000000000000000npub130nwn4t5x8h0h6d983lfs2x44znvqezucklurjzwtn7cv0c73cxsjemx32Hello%2C%20world!%20%F0%9F%94%97&input_type=utf-8&output_type=hex&hmac_enabled=0&hmac_input_type=utf-8
+    fn generate_roll_test() {
+        let nonce = [0u8; 32];
+        let roller_npub =
+            PublicKey::parse("npub130nwn4t5x8h0h6d983lfs2x44znvqezucklurjzwtn7cv0c73cxsjemx32")
+                .unwrap();
+        let memo = "Hello, world! 🔗".to_string();
+
+        let n = generate_roll(nonce, roller_npub, memo);
+
+        println!("You rolled a {n}");
+
+        assert_eq!(n, 19213);
+    }
 
     #[test]
     pub fn test_multipliers_1_05() {

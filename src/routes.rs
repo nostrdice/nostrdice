@@ -100,7 +100,7 @@ pub(crate) async fn get_invoice_impl(
         let zap = Zap {
             roller: zap_request.pubkey,
             invoice,
-            request: zap_request,
+            request: zap_request.clone(),
             note_id: zapped_note.to_bech32()?,
             receipt_id: None,
             payout_id: None,

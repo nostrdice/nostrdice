@@ -16,11 +16,12 @@ pub struct Zap {
     pub roller: PublicKey,
     pub invoice: Bolt11Invoice,
     pub request: Event,
-    // the note_id of the multiplier e.g. x1.1 that has been zapped
+    // The ID of the chosen multiplier note e.g. 10x.
     pub note_id: String,
-    // is some if the invoice was paid.
+    // Is `Some` if the zap invoice was paid.
     pub receipt_id: Option<String>,
-    // is set if the bet one and has been paid out.
+    // Is `Some` if the zapper chose a winning multiplier, _and_ if we
+    // have sent the payout to the zapper.
     pub payout_id: Option<String>,
 }
 
@@ -144,8 +145,7 @@ impl Multiplier {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DiceRoll {
-    pub roll: u16,
-    pub nonce: u64,
+    pub nonce: [u8; 32],
     pub event_id: EventId,
     pub multipliers: Vec<MultiplierNote>,
 }
