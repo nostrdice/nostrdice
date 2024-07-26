@@ -110,7 +110,7 @@ services:
       - ./config/cert.pem/:/usr/local/share/ca-certificates/nginx-proxy.crt
     command:
       - --relay=ws://nostr-rs-relay:8080
-      - --data-dir=./data
+      - --data-dir=/data
       - --domain=localhost
       - --port=1993
       - --lnd-host=bob
@@ -176,7 +176,7 @@ services:
     container_name: roller-lnurl-server
     command:
       - --relay=ws://nostr-rs-relay:8080
-      - --data-dir=./data
+      - --data-dir=/data
       - --domain=roller-lnurl-server-proxy
       - --port=1993
       - --lnd-host=alice

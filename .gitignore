@@ -15,5 +15,8 @@ Cargo.lock
 
 .idea/*
 
-keys.json
-zaps.db/*
+# ignore temporary data
+**/zaps.db
+
+# ignore polar data
+testsetup.polar

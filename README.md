@@ -42,7 +42,7 @@ go install github.com/holzeis/algia@fb12226618fdb2de03084c4eb7fa7f8ed887e0fc
 From this point onwards we assume that you use `algia`, but other clients should work as long as you can configure the relay, nsec and NWC settings.
 
 You will need to configure your client to use the expected relay, nsec and NWC settings.
-To do so, copy [this configuration file](./alice-config.json) to `~/.config/algia/alice-config.json`.
+To do so, copy [this configuration file](./config-alice.json) to `~/.config/algia/config-alice.json`.
 
 Find your multiplier:
 
