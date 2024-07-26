@@ -131,9 +131,7 @@ async fn main() -> anyhow::Result<()> {
     client.connect().await;
 
     let multipliers = {
-        let mut path = path.clone();
-        path.push(config.multiplier_config_file);
-
+        let path = PathBuf::from(&config.multipliers_file);
         let mut file = File::open(path).expect("Failed to open multiplier config file");
         let mut contents = String::new();
         file.read_to_string(&mut contents)
