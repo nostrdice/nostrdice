@@ -170,7 +170,7 @@ impl RoundManager {
                     );
 
                     let zap_details = ZapDetails::new(ZapType::Public).message(
-                        format!("Won a {} bet on NostrDice!", multiplier.get_multiplier())
+                        format!("Won a {}x bet on NostrDice!", multiplier.get_multiplier())
                             .to_string(),
                     );
 
