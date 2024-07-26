@@ -140,61 +140,55 @@ async fn main() -> anyhow::Result<()> {
         let docs =
             YamlLoader::load_from_str(&contents).expect("Failed to parse multiplier config file");
 
-        dbg!(&docs);
-
         let doc = &docs[0];
-
-        dbg!(&doc);
 
         // TODO: We should verify that the provided note IDs exist, parse the contents and ensure
         // that they represent their multiplier faithfully.
 
-        dbg!(doc["1_05"].clone());
-
         Multipliers([
             MultiplierNote {
                 multiplier: Multiplier::X1_05,
-                note_id: doc["1_05"].clone().into_string().expect("1_05"),
+                note_id: doc["x1_05"].clone().into_string().expect("1_05"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X1_1,
-                note_id: doc["1_1"].clone().into_string().expect("1_1"),
+                note_id: doc["x1_1"].clone().into_string().expect("1_1"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X1_33,
-                note_id: doc["1_33"].clone().into_string().expect("1_33"),
+                note_id: doc["x1_33"].clone().into_string().expect("1_33"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X1_5,
-                note_id: doc["1_5"].clone().into_string().expect("1_5"),
+                note_id: doc["x1_5"].clone().into_string().expect("1_5"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X2,
-                note_id: doc["2"].clone().into_string().expect("2"),
+                note_id: doc["x2"].clone().into_string().expect("2"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X3,
-                note_id: doc["3"].clone().into_string().expect("3"),
+                note_id: doc["x3"].clone().into_string().expect("3"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X10,
-                note_id: doc["10"].clone().into_string().expect("10"),
+                note_id: doc["x10"].clone().into_string().expect("10"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X25,
-                note_id: doc["25"].clone().into_string().expect("25"),
+                note_id: doc["x25"].clone().into_string().expect("25"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X50,
-                note_id: doc["50"].clone().into_string().expect("50"),
+                note_id: doc["x50"].clone().into_string().expect("50"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X100,
-                note_id: doc["100"].clone().into_string().expect("100"),
+                note_id: doc["x100"].clone().into_string().expect("100"),
             },
             MultiplierNote {
                 multiplier: Multiplier::X1000,
-                note_id: doc["1000"].clone().into_string().expect("1000"),
+                note_id: doc["x1000"].clone().into_string().expect("1000"),
             },
         ])
     };

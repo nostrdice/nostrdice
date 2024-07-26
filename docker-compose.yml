@@ -120,6 +120,7 @@ services:
       - --network=regtest
       - --cert-file=/config/tls.cert
       - --macaroon-file=/config/admin.macaroon
+      - --multipliers-file=/data/multipliers.yml
     networks:
       - nostr-dice-network
 

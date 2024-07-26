@@ -1,3 +1,7 @@
+
+# Path of the MULTIPLIER_FILE
+MULTIPLIER_FILE := "./data/multipliers.yml"
+
 all:
     # Start 2 LND nodes. This needs to be done first to ensure that certain directories are created ¯\_(ツ)_/¯
     just docker
@@ -13,6 +17,10 @@ docker:
 
     sleep 2
 
+    @echo creating multipliers.yml file
+    # Create the multiplier file
+    just nostr-dice-post-multipliers
+
     # Start all the other containers
     docker compose up --build -d
 
@@ -20,6 +28,7 @@ docker:
     docker exec -u 0 -it nostrdice update-ca-certificates
 
 wipe:
+    rm {{MULTIPLIER_FILE}}
     docker compose down -v
 
 create-channel:
@@ -103,6 +112,16 @@ wait-until-balance-grows-by node startingBalance increase:
     exit 1
 
 nostr-dice-post-multipliers:
+    #!/usr/bin/env bash
+    # Check if the multiplier file exists
+    if [ -f {{MULTIPLIER_FILE}} ]; then
+        echo "File {{MULTIPLIER_FILE}} exists. Cleaning up"
+        rm {{MULTIPLIER_FILE}}
+    fi
+
+    echo "Creating the multiplier file."
+    touch {{MULTIPLIER_FILE}}
+
     just nostrdice-post-multiplier 1.05 60541
     just nostrdice-post-multiplier 1.1 57789
     just nostrdice-post-multiplier 1.33 47796
@@ -116,4 +135,8 @@ nostr-dice-post-multipliers:
     just nostrdice-post-multiplier 1000 64
 
 nostrdice-post-multiplier multiplier threshold:
-    nostr-tool -p nsec1r8q685ht0t8986l37hj7u3xtysjk840f0p3ed77wv04mwn6l20mqtjg99g -r ws://localhost:7000 text-note --content 'Win {{multiplier}}x the amount you zapped if the rolled number is lower than {{threshold}}!'
+    #!/usr/bin/env bash
+    noteid=$(nostr-tool -p nsec1r8q685ht0t8986l37hj7u3xtysjk840f0p3ed77wv04mwn6l20mqtjg99g -r ws://localhost:7000 text-note --content 'Win {{multiplier}}x the amount you zapped if the rolled number is lower than {{threshold}}!' | cut -d ' ' -f 6)
+    stringlified=$(echo {{multiplier}} | sed 's/\./_/g')
+
+    echo x$stringlified:$noteid >> {{MULTIPLIER_FILE}}
