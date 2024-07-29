@@ -50,7 +50,7 @@ mod routes;
 mod subscriber;
 mod zapper;
 
-pub const MAIN_KEY_NAME: &str = "roll";
+pub const MAIN_KEY_NAME: &str = "main";
 pub const NONCE_KEY_NAME: &str = "nonce";
 pub const SOCIAL_KEY_NAME: &str = "social";
 
@@ -229,6 +229,7 @@ async fn main() -> anyhow::Result<()> {
 
     let server_router = Router::new()
         .route("/get-invoice-for-game/:hash", get(get_invoice_for_game))
+        .route("/get-invoice-for-zap/:hash", get(get_invoice_for_zap))
         .route("/.well-known/lnurlp/:name", get(get_lnurl_pay))
         .route("/.well-known/nostr.json", get(get_nip05))
         .fallback(fallback)
