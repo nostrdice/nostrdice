@@ -14,6 +14,7 @@ use axum::Json;
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash;
 use lightning_invoice::Bolt11Invoice;
+use lnurl::lightning_address::LightningAddress;
 use lnurl::pay::PayResponse;
 use lnurl::Tag;
 use nostr::event;
@@ -58,7 +59,11 @@ pub(crate) async fn get_invoice_impl(
         },
     };
 
-    // TODO: Check if the user has a Lightning address configured.
+    let metadata = state.client.metadata(zap_request.pubkey).await?;
+    let _ = match metadata.lud16 {
+        None => bail!("Can't accept bet from a roller without lightning address."),
+        Some(lud16) => LightningAddress::from_str(&lud16)?,
+    };
 
     let zapped_note_id = get_zapped_note_id(zap_request)?
         .to_bech32()
