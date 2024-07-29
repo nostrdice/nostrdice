@@ -1,6 +1,8 @@
-use crate::db;
 use crate::db::upsert_zap;
+use crate::db::BetState;
 use crate::db::Zap;
+use crate::nonce;
+use crate::nonce::get_active_nonce;
 use crate::State;
 use crate::MAIN_KEY_NAME;
 use crate::NONCE_KEY_NAME;
@@ -178,11 +180,11 @@ pub(crate) async fn get_invoice_for_game_impl(
         description_hash: sha256::Hash::hash(zap_request.as_json().as_bytes())
             .to_byte_array()
             .to_vec(),
-        // TODO: expire when the round ends.
-        expiry: 60 * 5,
+        // Once an active nonce has expired, this is how long it will take us to reveal it.
+        expiry: nonce::REVEAL_AFTER.as_secs() as i64,
         memo: format!(
             "Bet {} sats that you will roll a number smaller than {}, \
-                 to multiply your wager by {}. nostr:{}",
+             to multiply your wager by {}. nostr:{}",
             amount_msats * 1_000,
             multiplier_note.multiplier.get_lower_than(),
             multiplier_note.multiplier.get_content(),
@@ -191,6 +193,9 @@ pub(crate) async fn get_invoice_for_game_impl(
         private: state.route_hints,
         ..Default::default()
     };
+
+    // Better check that we are taking bets before adding the zap invoice.
+    let round = get_active_nonce(&state.db)?.context("Cannot accept zap without active nonce")?;
 
     let resp = lnd.add_invoice(invoice).await?.into_inner();
 
@@ -201,13 +206,13 @@ pub(crate) async fn get_invoice_for_game_impl(
         invoice,
         request: zap_request.clone(),
         multiplier_note_id: multiplier_note.note_id,
-        receipt_id: None,
-        payout_id: None,
+        nonce_commitment_note_id: round.event_id,
+        bet_state: BetState::ZapInvoiceRequested,
     };
 
-    let round = db::get_current_round(&state.db)?.context("No active dice roll at the moment!")?;
-
-    upsert_zap(&state.db, round.event_id, hex::encode(resp.r_hash), zap)?;
+    // At this stage, this `Zap` indicates the roller's _intention_ to bet. They have until the zap
+    // invoice's expiry to complete the bet.
+    upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
 
     Ok(resp.payment_request)
 }

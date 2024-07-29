@@ -1,4 +1,3 @@
-
 # Path of the MULTIPLIER_FILE
 MULTIPLIER_FILE := "./data/multipliers.yml"
 
@@ -88,12 +87,12 @@ wait-until-synced node:
     done
 
 # Checks if the balance of a Lightning node increases within a time
-# interval. With 15 iterations and 5 second intervals, we assume that
-# the round resolves within a minute or so.
+# interval. With 30 iterations and 5 second intervals, we assume that
+# the round resolves within a couple of minutes or so.
 wait-until-balance-grows-by node startingBalance increase:
     #!/usr/bin/env sh
     counter=0
-    max_iterations=15
+    max_iterations=30
 
     while [ $counter -lt $max_iterations ]; do
       echo "Checking if balance of {{startingBalance}} sats grew by {{increase}} sats"

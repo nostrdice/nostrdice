@@ -2,8 +2,8 @@ use crate::config::*;
 use crate::multiplier::Multiplier;
 use crate::multiplier::MultiplierNote;
 use crate::multiplier::Multipliers;
-use crate::round::run_rounds;
-use crate::round::RoundManager;
+use crate::nonce::manage_nonces;
+use crate::payouts::manage_payouts;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
 use crate::zapper::start_zapper;
@@ -45,7 +45,8 @@ mod config;
 mod db;
 mod logger;
 mod multiplier;
-mod round;
+mod nonce;
+mod payouts;
 mod routes;
 mod subscriber;
 mod zapper;
@@ -243,6 +244,15 @@ async fn main() -> anyhow::Result<()> {
 
     let server = axum::Server::bind(&addr).serve(server_router.into_make_service());
 
+    let revealed_round_tx = manage_payouts(state.db.clone(), client.clone(), multipliers);
+
+    spawn(manage_nonces(
+        client.clone(),
+        nonce_keys.clone(),
+        state.db.clone(),
+        revealed_round_tx,
+    ));
+
     // Invoice event stream
     spawn(start_invoice_subscription(
         state.db.clone(),
@@ -250,24 +260,6 @@ async fn main() -> anyhow::Result<()> {
         main_keys.clone(),
         client.clone(),
     ));
-
-    // TODO: add a way to stop a round, so we do not accidentally stop a round with active bets on
-    // them.
-    spawn({
-        let client = client.clone();
-        async move {
-            let round_manager = RoundManager::new(client.clone(), nonce_keys.clone(), multipliers);
-            if let Err(e) = run_rounds(
-                state.db.clone(),
-                round_manager,
-                Duration::from_secs(config.round_interval_seconds as u64),
-            )
-            .await
-            {
-                tracing::error!("Stopped rolling dice: {e:#}");
-            }
-        }
-    });
 
     let graceful = server.with_graceful_shutdown(async {
         tokio::signal::ctrl_c()
