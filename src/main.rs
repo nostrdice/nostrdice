@@ -50,16 +50,21 @@ mod routes;
 mod subscriber;
 mod zapper;
 
+pub const MAIN_KEY_NAME: &str = "roll";
+pub const NONCE_KEY_NAME: &str = "nonce";
+
 #[derive(Clone)]
 pub struct State {
     pub db: Db,
     pub lightning_client: LndLightningClient,
     pub router_client: LndRouterClient,
-    pub keys: Keys,
+    pub main_keys: Keys,
+    pub nonce_keys: Keys,
     pub domain: String,
     pub route_hints: bool,
     pub client: Client,
     pub multipliers: Multipliers,
+    pub relays: Vec<String>,
 }
 
 #[tokio::main]
@@ -197,11 +202,13 @@ async fn main() -> anyhow::Result<()> {
         db,
         lightning_client: lnd_client.lightning().clone(),
         router_client: lnd_client.router().clone(),
-        keys: main_keys.clone(),
+        main_keys: main_keys.clone(),
+        nonce_keys: nonce_keys.clone(),
         domain: config.domain.clone(),
         route_hints: config.route_hints,
         client: client.clone(),
         multipliers: multipliers.clone(),
+        relays,
     };
 
     let addr: std::net::SocketAddr = format!("{}:{}", config.bind, config.port)
@@ -213,6 +220,7 @@ async fn main() -> anyhow::Result<()> {
     let server_router = Router::new()
         .route("/get-invoice/:hash", get(get_invoice))
         .route("/.well-known/lnurlp/:name", get(get_lnurl_pay))
+        .route("/.well-known/nostr.json", get(get_nip05))
         .fallback(fallback)
         .layer(Extension(state.clone()))
         .layer(

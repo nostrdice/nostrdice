@@ -2,6 +2,8 @@ use crate::db;
 use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
+use crate::MAIN_KEY_NAME;
+use crate::NONCE_KEY_NAME;
 use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Context;
@@ -21,9 +23,13 @@ use nostr::EventId;
 use nostr::JsonUtil;
 use nostr::ToBech32;
 use nostr_sdk::TagStandard;
+use serde::de;
+use serde::Deserialize;
+use serde::Deserializer;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt;
 use std::str::FromStr;
 use tonic_openssl_lnd::lnrpc;
 
@@ -192,7 +198,7 @@ pub async fn get_lnurl_pay(
     let hash = sha256::Hash::hash(metadata.as_bytes());
     let callback = format!("https://{}/get-invoice/{}", state.domain, hex::encode(hash));
 
-    let pk = state.keys.public_key();
+    let pk = state.main_keys.public_key();
     let pk = bitcoin::key::XOnlyPublicKey::from_slice(&pk.serialize()).expect("valid PK");
 
     let resp = PayResponse {
@@ -215,4 +221,78 @@ pub(crate) fn handle_anyhow_error(err: anyhow::Error) -> (StatusCode, Json<Value
         "reason": format!("{err}"),
     });
     (StatusCode::BAD_REQUEST, Json(err))
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Nip05QueryParams {
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    name: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Nip05Response {
+    /// a pair of nip05 username and their corresponding pubkeys in hex format
+    pub names: HashMap<String, String>,
+    pub relays: HashMap<String, Vec<String>>,
+}
+
+pub async fn get_nip05(
+    params: Query<Nip05QueryParams>,
+    Extension(state): Extension<State>,
+) -> Result<Json<Nip05Response>, (StatusCode, Json<Value>)> {
+    let all = Nip05Response {
+        names: HashMap::from([
+            (
+                MAIN_KEY_NAME.to_string(),
+                state.main_keys.public_key().to_hex(),
+            ),
+            (
+                NONCE_KEY_NAME.to_string(),
+                state.nonce_keys.public_key().to_hex(),
+            ),
+        ]),
+        relays: HashMap::from([
+            (state.main_keys.public_key().to_hex(), state.relays.clone()),
+            (state.nonce_keys.public_key().to_hex(), state.relays.clone()),
+        ]),
+    };
+    if let Some(name) = &params.name {
+        return match name.as_str() {
+            MAIN_KEY_NAME => Ok(Json(Nip05Response {
+                names: HashMap::from([(
+                    MAIN_KEY_NAME.to_string(),
+                    state.main_keys.public_key().to_hex(),
+                )]),
+                relays: HashMap::from([(
+                    state.main_keys.public_key().to_hex(),
+                    state.relays.clone(),
+                )]),
+            })),
+            NONCE_KEY_NAME => Ok(Json(Nip05Response {
+                names: HashMap::from([(
+                    NONCE_KEY_NAME.to_string(),
+                    state.nonce_keys.public_key().to_hex(),
+                )]),
+                relays: HashMap::from([(
+                    state.nonce_keys.public_key().to_hex(),
+                    state.relays.clone(),
+                )]),
+            })),
+            _ => Ok(Json(all)),
+        };
+    }
+    Ok(Json(all))
+}
+
+fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    let opt = Option::<String>::deserialize(de)?;
+    match opt.as_deref() {
+        None | Some("") => Ok(None),
+        Some(s) => FromStr::from_str(s).map_err(de::Error::custom).map(Some),
+    }
 }
