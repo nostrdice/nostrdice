@@ -43,6 +43,9 @@ pub struct Config {
     /// Location of multipliers file
     #[clap(long)]
     pub multipliers_file: String,
+    /// If enabled logs will be in json format
+    #[clap(short, long)]
+    pub json: bool,
 }
 
 impl Config {
