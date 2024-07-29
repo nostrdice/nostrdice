@@ -71,6 +71,10 @@ pub(crate) async fn get_invoice_impl(
         }
     };
 
+    if amount_msats > multiplier_note.multiplier.get_max_amount_sat() * 1000 {
+        bail!("Zapped amount ({amount_msats} msat) is too high for the multiplier {}.", multiplier_note.multiplier.get_content());
+    }
+
     // TODO: Must commit to a lot more things to avoid forged fraud proofs.
     let invoice = lnrpc::Invoice {
         value_msat: amount_msats as i64,

@@ -44,6 +44,22 @@ pub enum Multiplier {
 }
 
 impl Multiplier {
+    pub const fn get_max_amount_sat(&self) -> u64 {
+        match self {
+            Multiplier::X1000 => 100,
+            Multiplier::X100 => 1_000,
+            Multiplier::X50 => 2_000,
+            Multiplier::X25 => 4_000,
+            Multiplier::X10 => 10_000,
+            Multiplier::X3 => 33_333,
+            Multiplier::X2 => 50_000,
+            Multiplier::X1_5 => 66_667,
+            Multiplier::X1_33 => 75_188,
+            Multiplier::X1_1 => 90_909,
+            Multiplier::X1_05 => 95_238,
+        }
+    }
+
     pub const fn get_multiplier(&self) -> f32 {
         match self {
             Multiplier::X1_05 => 1.05,
