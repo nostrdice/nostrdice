@@ -20,7 +20,6 @@ use crate::db;
 use crate::db::Round;
 use crate::db::Zap;
 use crate::multiplier::Multipliers;
-use crate::zapper::PayInvoice;
 use anyhow::Context;
 use anyhow::Result;
 use bitcoin::secp256k1::rand;
@@ -33,25 +32,15 @@ use nostr::Tag;
 use nostr::ToBech32;
 use nostr_sdk::client::ZapDetails;
 use nostr_sdk::hashes::Hash;
-use nostr_sdk::zapper::async_trait;
 use nostr_sdk::Client;
-use nostr_sdk::NostrZapper;
 use nostr_sdk::PublicKey;
 use nostr_sdk::TagStandard;
-use nostr_sdk::ZapperBackend;
-use nostr_sdk::ZapperError;
 use rand::thread_rng;
 use rand::Rng;
 use rand::SeedableRng;
 use sled::Db;
 use std::fmt::Debug;
 use std::time::Duration;
-use tokio::sync::mpsc;
-
-#[derive(Clone, Debug)]
-pub struct LndZapper {
-    pub sender: mpsc::Sender<PayInvoice>,
-}
 
 #[derive(Clone, Debug)]
 pub struct RoundManager {
@@ -96,7 +85,7 @@ impl RoundManager {
         tracing::info!("Time to roll the dice");
 
         for zap in zaps {
-            match zap {
+            match &zap {
                 Zap {
                     roller,
                     invoice,
@@ -105,18 +94,17 @@ impl RoundManager {
                     receipt_id: Some(_),
                     ..
                 } => {
-                    let roll = generate_roll(round.nonce, roller, request.content.clone());
+                    let roll = generate_roll(round.nonce, *roller, request.content.clone());
 
-                    // TODO: This will change once we use static multiplier notes.
                     let multiplier = match self
                         .multipliers
                         .0
                         .iter()
-                        .find(|note| note.note_id == multiplier_note_id)
+                        .find(|note| &note.note_id == multiplier_note_id)
                     {
                         Some(note) => &note.multiplier,
                         None => {
-                            tracing::warn!("Zap does not correspond to this round");
+                            tracing::error!(?zap, "Zap for unknown multiplier note ID");
                             continue;
                         }
                     };
@@ -131,7 +119,7 @@ impl RoundManager {
                         // the send_private_message function (NIP17) seems to be not supported by
                         // major nostr clients.
                         #[allow(deprecated)]
-                        if let Err(e) = self.client.send_direct_msg(roller, format!("You lost. You rolled {roll}, which was bigger than {threshold}. Try again!"), None).await {
+                        if let Err(e) = self.client.send_direct_msg(*roller, format!("You lost. You rolled {roll}, which was bigger than {threshold}. Try again!"), None).await {
                             tracing::error!(%roller, "Failed to send private message. Error: {e:#}");
                         }
 
@@ -144,7 +132,7 @@ impl RoundManager {
                     if let Err(e) = self
                         .client
                         .send_direct_msg(
-                            roller,
+                            *roller,
                             format!(
                                 "You won. You rolled {roll}, which was lower than {threshold}."
                             ),
@@ -203,22 +191,6 @@ impl RoundManager {
 
 pub fn calculate_price_money(amount_msat: u64, multiplier: f32) -> u64 {
     ((amount_msat as f32 / 1000.0) * multiplier).floor() as u64
-}
-
-#[async_trait]
-impl NostrZapper for LndZapper {
-    type Err = ZapperError;
-
-    fn backend(&self) -> ZapperBackend {
-        ZapperBackend::Custom("lnd".to_string())
-    }
-
-    async fn pay(&self, invoice: String) -> nostr::Result<(), Self::Err> {
-        self.sender
-            .send(PayInvoice(invoice))
-            .await
-            .map_err(ZapperError::backend)
-    }
 }
 
 pub async fn run_rounds(db: Db, manager: RoundManager, round_interval: Duration) -> Result<()> {
@@ -314,9 +286,9 @@ fn generate_roll(nonce: [u8; 32], roller_npub: PublicKey, memo: String) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dice::calculate_price_money;
-    use crate::dice::generate_roll;
     use crate::multiplier::Multiplier;
+    use crate::round::calculate_price_money;
+    use crate::round::generate_roll;
 
     #[test]
     /// You can verify the outcome by visiting this URL:

@@ -4,7 +4,6 @@ use crate::db::Zap;
 use crate::State;
 use crate::MAIN_KEY_NAME;
 use crate::NONCE_KEY_NAME;
-use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Context;
 use axum::extract::Path;
@@ -22,7 +21,6 @@ use nostr::Event;
 use nostr::EventId;
 use nostr::JsonUtil;
 use nostr::ToBech32;
-use nostr_sdk::TagStandard;
 use serde::de;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -35,92 +33,85 @@ use tonic_openssl_lnd::lnrpc;
 
 pub(crate) async fn get_invoice_impl(
     state: State,
-    hash: String,
     amount_msats: u64,
     zap_request: Option<Event>,
 ) -> anyhow::Result<String> {
     let mut lnd = state.lightning_client.clone();
-    let (desc_hash, memo) = match zap_request.as_ref() {
-        None => (
-            sha256::Hash::from_str(&hash)?,
-            "Donation to nostr-dice".to_string(),
-        ),
-        Some(event) => {
-            // todo validate as valid zap request
-            if event.kind != nostr::Kind::ZapRequest {
-                return Err(anyhow!("Invalid zap request"));
-            }
+    let zap_request = match zap_request.as_ref() {
+        // TODO: Maybe we should get rid of this branch altogether.
+        None => {
+            let request = lnrpc::Invoice {
+                value_msat: amount_msats as i64,
+                memo: "Donation to NostrDice".to_string(),
+                private: state.route_hints,
+                ..Default::default()
+            };
 
-            // TODO: check if the user has a lightning address configured
+            let resp = lnd.add_invoice(request).await?.into_inner();
 
-            let zapped_note_id = get_note_id(event)?.to_bech32().expect("to fit");
+            return Ok(resp.payment_request);
+        }
+        Some(event) => match event.kind() {
+            // TODO: Validate as valid zap request.
+            nostr::Kind::ZapRequest => event,
+            _ => bail!("Invalid Nostr event: not a zap request"),
+        },
+    };
 
-            match state.multipliers.get_multiplier_note(&zapped_note_id) {
-                Some(multiplier_note) => (
-                    sha256::Hash::hash(event.as_json().as_bytes()),
-                    format!(
-                        "You bet {} your amount on Nostr Dice that the roll is lower than {}, nostr:{}",
-                        multiplier_note.multiplier.get_content(),
-                        multiplier_note.multiplier.get_lower_than(),
-                        zapped_note_id
-                    ),
-                ),
-                None => {
-                    bail!("Zapped note which wasn't a multiplier note")
-                }
-            }
+    // TODO: Check if the user has a Lightning address configured.
+
+    let zapped_note_id = get_zapped_note_id(zap_request)?
+        .to_bech32()
+        .expect("valid note ID");
+
+    let multiplier_note = match state.multipliers.get_multiplier_note(&zapped_note_id) {
+        Some(multiplier_note) => multiplier_note,
+        None => {
+            bail!("Zapped note which wasn't a multiplier note");
         }
     };
 
     // TODO: Must commit to a lot more things to avoid forged fraud proofs.
-    let request = lnrpc::Invoice {
+    let invoice = lnrpc::Invoice {
         value_msat: amount_msats as i64,
-        description_hash: desc_hash.to_byte_array().to_vec(),
+        description_hash: sha256::Hash::hash(zap_request.as_json().as_bytes())
+            .to_byte_array()
+            .to_vec(),
         // TODO: expire when the round ends.
         expiry: 60 * 5,
-        memo,
+        memo: format!(
+            "Bet {} sats that you will roll a number smaller than {}, \
+                 to multiply your wager by {}. nostr:{}",
+            amount_msats * 1_000,
+            multiplier_note.multiplier.get_lower_than(),
+            multiplier_note.multiplier.get_content(),
+            zapped_note_id
+        ),
         private: state.route_hints,
         ..Default::default()
     };
 
-    let resp = lnd.add_invoice(request).await?.into_inner();
+    let resp = lnd.add_invoice(invoice).await?.into_inner();
 
-    // TODO: Combine the branches.
-    if let Some(zap_request) = zap_request {
-        let invoice = Bolt11Invoice::from_str(&resp.payment_request)?;
-        let tags = zap_request.tags();
-        let tags = tags
-            .iter()
-            .filter_map(|tag| match tag.as_standardized() {
-                Some(TagStandard::Event { event_id, .. }) => Some(*event_id),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
+    let invoice = Bolt11Invoice::from_str(&resp.payment_request)?;
 
-        let zapped_note = tags
-            // first is ok here, because there should only be one event (if any)
-            .first()
-            .context("can only accept zaps on notes.")?;
+    let zap = Zap {
+        roller: zap_request.pubkey,
+        invoice,
+        request: zap_request.clone(),
+        multiplier_note_id: multiplier_note.note_id,
+        receipt_id: None,
+        payout_id: None,
+    };
 
-        let zap = Zap {
-            roller: zap_request.pubkey,
-            invoice,
-            request: zap_request.clone(),
-            multiplier_note_id: zapped_note.to_bech32()?,
-            receipt_id: None,
-            payout_id: None,
-        };
+    let round = db::get_current_round(&state.db)?.context("No active dice roll at the moment!")?;
 
-        let round =
-            db::get_current_round(&state.db)?.context("No active dice roll at the moment!")?;
-
-        upsert_zap(&state.db, round.event_id, hex::encode(resp.r_hash), zap)?;
-    }
+    upsert_zap(&state.db, round.event_id, hex::encode(resp.r_hash), zap)?;
 
     Ok(resp.payment_request)
 }
 
-fn get_note_id(zap_request: &Event) -> anyhow::Result<EventId> {
+fn get_zapped_note_id(zap_request: &Event) -> anyhow::Result<EventId> {
     let tags = zap_request.tags();
     let tags = tags
         .iter()
@@ -139,7 +130,6 @@ fn get_note_id(zap_request: &Event) -> anyhow::Result<EventId> {
 }
 
 pub async fn get_invoice(
-    Path(hash): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     Extension(state): Extension<State>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
@@ -174,7 +164,7 @@ pub async fn get_invoice(
         }
     }?;
 
-    match get_invoice_impl(state, hash, amount_msats, zap_request).await {
+    match get_invoice_impl(state, amount_msats, zap_request).await {
         Ok(invoice) => Ok(Json(json!({
             "pr": invoice,
             "routers": []
