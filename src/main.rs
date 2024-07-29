@@ -108,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (main_keys_path, nonce_keys_path) = {
         let mut main_keys_path = path.clone();
-        main_keys_path.push("keys.json");
+        main_keys_path.push("main-keys.json");
 
         let mut nonce_keys_path = path.clone();
         nonce_keys_path.push("nonce-keys.json");
