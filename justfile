@@ -61,7 +61,7 @@ create-channel:
 create-nostr-profiles:
     nostr-tool -p nsec105hgh0fknmkrzj7kfhkq5mdfpa3altsmvaa68fkn3hudwk8nlhvq9q2c8w -r ws://localhost:7000 update-metadata --lud16 nonce@localhost
     nostr-tool -p nsec1z9vkzgsh75nd40dvq9ux4v2hdl7djnmeafkaa2w9z3f0kftejjtqlgrajr -r ws://localhost:7000 update-metadata --lud16 social@localhost
-    nostr-tool -p nsec1r8q685ht0t8986l37hj7u3xtysjk840f0p3ed77wv04mwn6l20mqtjg99g -r ws://localhost:7000 update-metadata --lud16 bob@localhost
+    nostr-tool -p nsec1r8q685ht0t8986l37hj7u3xtysjk840f0p3ed77wv04mwn6l20mqtjg99g -r ws://localhost:7000 update-metadata --lud16 main@localhost
     nostr-tool -p nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5 -r ws://localhost:7000 update-metadata --lud16 alice@roller-lnurl-server-proxy
 
 # Zap the latest 1.05x multiplier note and get a reward. Should pass 92.38% of the time.
