@@ -52,14 +52,19 @@ mod zapper;
 
 pub const MAIN_KEY_NAME: &str = "roll";
 pub const NONCE_KEY_NAME: &str = "nonce";
+pub const SOCIAL_KEY_NAME: &str = "social";
 
 #[derive(Clone)]
 pub struct State {
     pub db: Db,
     pub lightning_client: LndLightningClient,
     pub router_client: LndRouterClient,
+    /// The keys for the account posting the multiplier notes
     pub main_keys: Keys,
+    /// The keys for the account posting the nonce notes
     pub nonce_keys: Keys,
+    /// The keys for a social media account posting game unrelated posts
+    pub social_keys: Keys,
     pub domain: String,
     pub route_hints: bool,
     pub client: Client,
@@ -106,18 +111,22 @@ async fn main() -> anyhow::Result<()> {
     // DB management
     let db = sled::open(&db_path)?;
 
-    let (main_keys_path, nonce_keys_path) = {
+    let (main_keys_path, nonce_keys_path, social_keys_path) = {
         let mut main_keys_path = path.clone();
         main_keys_path.push("main-keys.json");
 
         let mut nonce_keys_path = path.clone();
         nonce_keys_path.push("nonce-keys.json");
 
-        (main_keys_path, nonce_keys_path)
+        let mut social_keys_path = path.clone();
+        social_keys_path.push("social-keys.json");
+
+        (main_keys_path, nonce_keys_path, social_keys_path)
     };
 
     let main_keys = get_keys(main_keys_path);
     let nonce_keys = get_keys(nonce_keys_path);
+    let social_keys = get_keys(social_keys_path);
 
     let options = Options::default();
     // Create new client
@@ -204,6 +213,7 @@ async fn main() -> anyhow::Result<()> {
         router_client: lnd_client.router().clone(),
         main_keys: main_keys.clone(),
         nonce_keys: nonce_keys.clone(),
+        social_keys: social_keys.clone(),
         domain: config.domain.clone(),
         route_hints: config.route_hints,
         client: client.clone(),

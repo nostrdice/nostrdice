@@ -1,9 +1,9 @@
-use crate::db;
 use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
 use crate::MAIN_KEY_NAME;
 use crate::NONCE_KEY_NAME;
+use crate::{db, SOCIAL_KEY_NAME};
 use anyhow::bail;
 use anyhow::Context;
 use axum::extract::Path;
@@ -240,10 +240,18 @@ pub async fn get_nip05(
                 NONCE_KEY_NAME.to_string(),
                 state.nonce_keys.public_key().to_hex(),
             ),
+            (
+                SOCIAL_KEY_NAME.to_string(),
+                state.social_keys.public_key().to_hex(),
+            ),
         ]),
         relays: HashMap::from([
             (state.main_keys.public_key().to_hex(), state.relays.clone()),
             (state.nonce_keys.public_key().to_hex(), state.relays.clone()),
+            (
+                state.social_keys.public_key().to_hex(),
+                state.relays.clone(),
+            ),
         ]),
     };
     if let Some(name) = &params.name {
@@ -261,6 +269,16 @@ pub async fn get_nip05(
             NONCE_KEY_NAME => Ok(Json(Nip05Response {
                 names: HashMap::from([(
                     NONCE_KEY_NAME.to_string(),
+                    state.nonce_keys.public_key().to_hex(),
+                )]),
+                relays: HashMap::from([(
+                    state.nonce_keys.public_key().to_hex(),
+                    state.relays.clone(),
+                )]),
+            })),
+            SOCIAL_KEY_NAME => Ok(Json(Nip05Response {
+                names: HashMap::from([(
+                    SOCIAL_KEY_NAME.to_string(),
                     state.nonce_keys.public_key().to_hex(),
                 )]),
                 relays: HashMap::from([(
