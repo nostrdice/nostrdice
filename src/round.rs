@@ -287,9 +287,9 @@ fn generate_roll(nonce: [u8; 32], roller_npub: PublicKey, memo: String) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dice::calculate_price_money;
-    use crate::dice::generate_roll;
     use crate::multiplier::Multiplier;
+    use crate::round::calculate_price_money;
+    use crate::round::generate_roll;
 
     #[test]
     /// You can verify the outcome by visiting this URL:

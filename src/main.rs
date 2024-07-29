@@ -1,9 +1,9 @@
 use crate::config::*;
-use crate::dice::run_rounds;
-use crate::dice::RoundManager;
 use crate::multiplier::Multiplier;
 use crate::multiplier::MultiplierNote;
 use crate::multiplier::Multipliers;
+use crate::round::run_rounds;
+use crate::round::RoundManager;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
 use crate::zapper::start_zapper;
@@ -43,9 +43,9 @@ use yaml_rust2::YamlLoader;
 
 mod config;
 mod db;
-mod dice;
 mod logger;
 mod multiplier;
+mod round;
 mod routes;
 mod subscriber;
 mod zapper;
