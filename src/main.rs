@@ -228,7 +228,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Webserver running on http://{}", addr);
 
     let server_router = Router::new()
-        .route("/get-invoice/:hash", get(get_invoice))
+        .route("/get-invoice-for-game/:hash", get(get_invoice_for_game))
         .route("/.well-known/lnurlp/:name", get(get_lnurl_pay))
         .route("/.well-known/nostr.json", get(get_nip05))
         .fallback(fallback)

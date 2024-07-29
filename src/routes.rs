@@ -1,9 +1,10 @@
+use crate::db;
 use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
 use crate::MAIN_KEY_NAME;
 use crate::NONCE_KEY_NAME;
-use crate::{db, SOCIAL_KEY_NAME};
+use crate::SOCIAL_KEY_NAME;
 use anyhow::bail;
 use anyhow::Context;
 use axum::extract::Path;
@@ -31,7 +32,55 @@ use std::fmt;
 use std::str::FromStr;
 use tonic_openssl_lnd::lnrpc;
 
-pub(crate) async fn get_invoice_impl(
+/// Returns an invoice if a user wants to play a game
+pub async fn get_invoice_for_game(
+    Query(params): Query<HashMap<String, String>>,
+    Extension(state): Extension<State>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let (amount_msats, zap_request) = match params.get("amount").and_then(|a| a.parse::<u64>().ok())
+    {
+        None => Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "status": "ERROR",
+                "reason": "Missing amount parameter",
+            })),
+        )),
+        Some(amount_msats) => {
+            let zap_request = params.get("nostr").map_or_else(
+                || Ok(None),
+                |event_str| {
+                    Event::from_json(event_str)
+                        .map_err(|_| {
+                            (
+                                StatusCode::BAD_REQUEST,
+                                Json(json!({
+                                    "status": "ERROR",
+                                    "reason": "Invalid zap request",
+                                })),
+                            )
+                        })
+                        .map(Some)
+                },
+            )?;
+
+            Ok((amount_msats, zap_request))
+        }
+    }?;
+
+    match get_invoice_for_game_impl(state, amount_msats, zap_request).await {
+        Ok(invoice) => Ok(Json(json!({
+            "pr": invoice,
+            "routers": []
+        }))),
+        Err(e) => {
+            tracing::error!("Failed to get invoice: {e:#}");
+            Err(handle_anyhow_error(e))
+        }
+    }
+}
+
+pub(crate) async fn get_invoice_for_game_impl(
     state: State,
     amount_msats: u64,
     zap_request: Option<Event>,
@@ -127,53 +176,6 @@ fn get_zapped_note_id(zap_request: &Event) -> anyhow::Result<EventId> {
         .context("can only accept zaps on notes.")?;
 
     Ok(*zapped_note)
-}
-
-pub async fn get_invoice(
-    Query(params): Query<HashMap<String, String>>,
-    Extension(state): Extension<State>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let (amount_msats, zap_request) = match params.get("amount").and_then(|a| a.parse::<u64>().ok())
-    {
-        None => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "status": "ERROR",
-                "reason": "Missing amount parameter",
-            })),
-        )),
-        Some(amount_msats) => {
-            let zap_request = params.get("nostr").map_or_else(
-                || Ok(None),
-                |event_str| {
-                    Event::from_json(event_str)
-                        .map_err(|_| {
-                            (
-                                StatusCode::BAD_REQUEST,
-                                Json(json!({
-                                    "status": "ERROR",
-                                    "reason": "Invalid zap request",
-                                })),
-                            )
-                        })
-                        .map(Some)
-                },
-            )?;
-
-            Ok((amount_msats, zap_request))
-        }
-    }?;
-
-    match get_invoice_impl(state, amount_msats, zap_request).await {
-        Ok(invoice) => Ok(Json(json!({
-            "pr": invoice,
-            "routers": []
-        }))),
-        Err(e) => {
-            tracing::error!("Failed to get invoice: {e:#}");
-            Err(handle_anyhow_error(e))
-        }
-    }
 }
 
 pub async fn get_lnurl_pay(
