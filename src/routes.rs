@@ -2,6 +2,8 @@ use crate::db;
 use crate::db::upsert_zap;
 use crate::db::Zap;
 use crate::State;
+use crate::MAIN_KEY_NAME;
+use crate::NONCE_KEY_NAME;
 use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Context;
@@ -240,8 +242,14 @@ pub async fn get_nip05(
 ) -> Result<Json<Nip05Response>, (StatusCode, Json<Value>)> {
     let all = Nip05Response {
         names: HashMap::from([
-            ("roll".to_string(), state.main_keys.public_key().to_hex()),
-            ("nonce".to_string(), state.nonce_keys.public_key().to_hex()),
+            (
+                MAIN_KEY_NAME.to_string(),
+                state.main_keys.public_key().to_hex(),
+            ),
+            (
+                NONCE_KEY_NAME.to_string(),
+                state.nonce_keys.public_key().to_hex(),
+            ),
         ]),
         relays: HashMap::from([
             (state.main_keys.public_key().to_hex(), state.relays.clone()),
@@ -250,16 +258,19 @@ pub async fn get_nip05(
     };
     if let Some(name) = &params.name {
         return match name.as_str() {
-            "roll" => Ok(Json(Nip05Response {
-                names: HashMap::from([("roll".to_string(), state.main_keys.public_key().to_hex())]),
+            MAIN_KEY_NAME => Ok(Json(Nip05Response {
+                names: HashMap::from([(
+                    MAIN_KEY_NAME.to_string(),
+                    state.main_keys.public_key().to_hex(),
+                )]),
                 relays: HashMap::from([(
                     state.main_keys.public_key().to_hex(),
                     state.relays.clone(),
                 )]),
             })),
-            "nonce" => Ok(Json(Nip05Response {
+            NONCE_KEY_NAME => Ok(Json(Nip05Response {
                 names: HashMap::from([(
-                    "nonce".to_string(),
+                    NONCE_KEY_NAME.to_string(),
                     state.nonce_keys.public_key().to_hex(),
                 )]),
                 relays: HashMap::from([(

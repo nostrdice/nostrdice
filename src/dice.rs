@@ -128,7 +128,8 @@ impl RoundManager {
                             "{roller} was aiming for <{threshold}, and they got {roll}"
                         );
 
-                        // the send_private_message function (NIP17) seems to be not supported by major nostr clients.
+                        // the send_private_message function (NIP17) seems to be not supported by
+                        // major nostr clients.
                         #[allow(deprecated)]
                         if let Err(e) = self.client.send_direct_msg(roller, format!("You lost. You rolled {roll}, which was bigger than {threshold}. Try again!"), None).await {
                             tracing::error!(%roller, "Failed to send private message. Error: {e:#}");
@@ -137,7 +138,8 @@ impl RoundManager {
                         continue;
                     }
 
-                    // the send_private_message function (NIP17) seems to be not supported by major nostr clients.
+                    // the send_private_message function (NIP17) seems to be not supported by major
+                    // nostr clients.
                     #[allow(deprecated)]
                     if let Err(e) = self
                         .client

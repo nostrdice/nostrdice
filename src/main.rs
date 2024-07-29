@@ -50,6 +50,9 @@ mod routes;
 mod subscriber;
 mod zapper;
 
+pub const MAIN_KEY_NAME: &str = "roll";
+pub const NONCE_KEY_NAME: &str = "nonce";
+
 #[derive(Clone)]
 pub struct State {
     pub db: Db,
