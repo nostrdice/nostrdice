@@ -1,6 +1,7 @@
 use crate::db;
 use crate::db::upsert_zap;
 use crate::db::Zap;
+use crate::utils;
 use crate::State;
 use crate::MAIN_KEY_NAME;
 use crate::NONCE_KEY_NAME;
@@ -17,9 +18,7 @@ use bitcoin::hashes::Hash;
 use lightning_invoice::Bolt11Invoice;
 use lnurl::pay::PayResponse;
 use lnurl::Tag;
-use nostr::event;
 use nostr::Event;
-use nostr::EventId;
 use nostr::JsonUtil;
 use nostr::ToBech32;
 use serde::de;
@@ -157,7 +156,7 @@ pub(crate) async fn get_invoice_for_game_impl(
 
     // TODO: Check if the user has a Lightning address configured.
 
-    let zapped_note_id = get_zapped_note_id(zap_request)?
+    let zapped_note_id = utils::get_zapped_note_id(zap_request)?
         .to_bech32()
         .expect("valid note ID");
 
@@ -169,7 +168,10 @@ pub(crate) async fn get_invoice_for_game_impl(
     };
 
     if amount_msats > multiplier_note.multiplier.get_max_amount_sat() * 1000 {
-        bail!("Zapped amount ({amount_msats} msat) is too high for the multiplier {}.", multiplier_note.multiplier.get_content());
+        bail!(
+            "Zapped amount ({amount_msats} msat) is too high for the multiplier {}.",
+            multiplier_note.multiplier.get_content()
+        );
     }
 
     // TODO: Must commit to a lot more things to avoid forged fraud proofs.
@@ -210,24 +212,6 @@ pub(crate) async fn get_invoice_for_game_impl(
     upsert_zap(&state.db, round.event_id, hex::encode(resp.r_hash), zap)?;
 
     Ok(resp.payment_request)
-}
-
-fn get_zapped_note_id(zap_request: &Event) -> anyhow::Result<EventId> {
-    let tags = zap_request.tags();
-    let tags = tags
-        .iter()
-        .filter_map(|tag| match tag.as_standardized() {
-            Some(event::TagStandard::Event { event_id, .. }) => Some(*event_id),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    let zapped_note = tags
-        // first is ok here, because there should only be one event (if any)
-        .first()
-        .context("can only accept zaps on notes.")?;
-
-    Ok(*zapped_note)
 }
 
 pub(crate) async fn get_invoice_for_zap_impl(
