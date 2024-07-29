@@ -64,9 +64,9 @@ pub struct State {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    logger::init_tracing(LevelFilter::DEBUG, false)?;
-
     let config: Config = Config::parse();
+
+    logger::init_tracing(LevelFilter::DEBUG, config.json)?;
 
     let relays = config.clone().relay;
 
