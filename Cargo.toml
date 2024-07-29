@@ -36,6 +36,8 @@ rand = "0.8.5"
 atty = "0.2.14"
 strum = "0.26.3"
 strum_macros = "0.26.4"
+yaml-rust2 = "0.8.1"
+
 
 [patch.crates-io]
 lnurl-pay = { git = "https://github.com/luckysori/lnurl-pay" }

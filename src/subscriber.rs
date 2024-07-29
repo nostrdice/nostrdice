@@ -82,7 +82,7 @@ async fn handle_paid_invoice(
     keys: Keys,
     client: Client,
 ) -> anyhow::Result<()> {
-    let dice_roll = db::get_active_dice_roll(db)?.context("No active dice roll.")?;
+    let dice_roll = db::get_current_round(db)?.context("No active dice roll.")?;
     let roll_event_id = dice_roll.event_id;
 
     match get_zap(db, roll_event_id, payment_hash.clone())? {

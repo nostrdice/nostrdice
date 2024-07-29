@@ -40,8 +40,9 @@ pub struct Config {
     pub relay: Vec<String>,
     #[clap(default_value_t = 60, long)]
     pub round_interval_seconds: u32,
-    #[clap(default_value_t = 0, long)]
-    pub multiplier_gap_seconds: u32,
+    /// Location of multipliers file
+    #[clap(long)]
+    pub multipliers_file: String,
 }
 
 impl Config {
