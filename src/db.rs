@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use sled::Db;
 
+/// The record of a roller's bet.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Zap {
     pub roller: PublicKey,

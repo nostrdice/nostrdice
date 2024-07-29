@@ -85,7 +85,7 @@ impl RoundManager {
         tracing::info!("Time to roll the dice");
 
         for zap in zaps {
-            match zap {
+            match &zap {
                 Zap {
                     roller,
                     invoice,
@@ -94,18 +94,17 @@ impl RoundManager {
                     receipt_id: Some(_),
                     ..
                 } => {
-                    let roll = generate_roll(round.nonce, roller, request.content.clone());
+                    let roll = generate_roll(round.nonce, *roller, request.content.clone());
 
-                    // TODO: This will change once we use static multiplier notes.
                     let multiplier = match self
                         .multipliers
                         .0
                         .iter()
-                        .find(|note| note.note_id == multiplier_note_id)
+                        .find(|note| &note.note_id == multiplier_note_id)
                     {
                         Some(note) => &note.multiplier,
                         None => {
-                            tracing::warn!("Zap does not correspond to this round");
+                            tracing::error!(?zap, "Zap for unknown multiplier note ID");
                             continue;
                         }
                     };
@@ -120,7 +119,7 @@ impl RoundManager {
                         // the send_private_message function (NIP17) seems to be not supported by
                         // major nostr clients.
                         #[allow(deprecated)]
-                        if let Err(e) = self.client.send_direct_msg(roller, format!("You lost. You rolled {roll}, which was bigger than {threshold}. Try again!"), None).await {
+                        if let Err(e) = self.client.send_direct_msg(*roller, format!("You lost. You rolled {roll}, which was bigger than {threshold}. Try again!"), None).await {
                             tracing::error!(%roller, "Failed to send private message. Error: {e:#}");
                         }
 
@@ -133,7 +132,7 @@ impl RoundManager {
                     if let Err(e) = self
                         .client
                         .send_direct_msg(
-                            roller,
+                            *roller,
                             format!(
                                 "You won. You rolled {roll}, which was lower than {threshold}."
                             ),
