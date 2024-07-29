@@ -147,17 +147,36 @@ async fn pay_out_winners(
                     format!("Won a {}x bet on NostrDice!", multiplier.get_multiplier()).to_string(),
                 );
 
-                if let Err(e) = client.zap(zap.roller, amount_sat, Some(zap_details)).await {
+                let zap = if let Err(e) =
+                    client.zap(zap.roller, amount_sat, Some(zap_details)).await
+                {
                     tracing::error!("Failed to zap {}. Error: {e:#}", zap.roller);
 
-                    // TODO: Send a message to the user that we have not been able to
-                    // payout.
-                }
+                    // the send_private_message function (NIP17) seems to be not supported by
+                    // major nostr clients.
+                    #[allow(deprecated)]
+                    if let Err(e) = client
+                        .send_direct_msg(
+                            zap.roller,
+                            "Sorry, we failed to zap you your payout.".to_string(),
+                            None,
+                        )
+                        .await
+                    {
+                        tracing::error!(roller=%zap.roller, "Failed to send direct message. Error: {e:#}")
+                    }
 
-                let zap = Zap {
-                    bet_state: BetState::PaidWinner,
-                    ..zap.clone()
+                    Zap {
+                        bet_state: BetState::ZapFailed,
+                        ..zap.clone()
+                    }
+                } else {
+                    Zap {
+                        bet_state: BetState::PaidWinner,
+                        ..zap.clone()
+                    }
                 };
+
                 if let Err(e) = upsert_zap(&db, invoice.payment_hash().to_string(), zap) {
                     tracing::error!(%roller, "Failed to set BetState to PaidWinner. Error: {e:#}");
                 }

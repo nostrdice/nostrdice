@@ -26,6 +26,7 @@ pub enum BetState {
     ZapPaid,
     PaidWinner,
     Loser,
+    ZapFailed,
 }
 
 pub fn upsert_zap(db: &Db, payment_hash: String, zap: Zap) -> anyhow::Result<()> {
