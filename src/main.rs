@@ -1,6 +1,5 @@
 use crate::config::*;
 use crate::dice::run_rounds;
-use crate::dice::LndZapper;
 use crate::dice::RoundManager;
 use crate::multiplier::Multiplier;
 use crate::multiplier::MultiplierNote;
@@ -8,6 +7,7 @@ use crate::multiplier::Multipliers;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
 use crate::zapper::start_zapper;
+use crate::zapper::LndZapper;
 use axum::http;
 use axum::http::Method;
 use axum::http::StatusCode;

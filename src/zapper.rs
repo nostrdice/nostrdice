@@ -1,3 +1,7 @@
+use nostr_sdk::zapper::async_trait;
+use nostr_sdk::NostrZapper;
+use nostr_sdk::ZapperBackend;
+use nostr_sdk::ZapperError;
 use tokio::sync::mpsc;
 use tonic_openssl_lnd::routerrpc::SendPaymentRequest;
 use tonic_openssl_lnd::LndRouterClient;
@@ -36,4 +40,25 @@ pub fn start_zapper(lnd: LndRouterClient) -> mpsc::Sender<PayInvoice> {
     });
 
     sender
+}
+
+#[derive(Clone, Debug)]
+pub struct LndZapper {
+    pub sender: mpsc::Sender<PayInvoice>,
+}
+
+#[async_trait]
+impl NostrZapper for LndZapper {
+    type Err = ZapperError;
+
+    fn backend(&self) -> ZapperBackend {
+        ZapperBackend::Custom("lnd".to_string())
+    }
+
+    async fn pay(&self, invoice: String) -> nostr::Result<(), Self::Err> {
+        self.sender
+            .send(PayInvoice(invoice))
+            .await
+            .map_err(ZapperError::backend)
+    }
 }
