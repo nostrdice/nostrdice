@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
-description = "nostr dice"
+description = "Dice-rolling game on Nostr"
 
 [[bin]]
 name = "nostr-dice"

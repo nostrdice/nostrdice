@@ -43,7 +43,7 @@ pub(crate) async fn get_invoice_impl(
     let (desc_hash, memo) = match zap_request.as_ref() {
         None => (
             sha256::Hash::from_str(&hash)?,
-            "Donation to nostr-dice".to_string(),
+            "Donation to NostrDice".to_string(),
         ),
         Some(event) => {
             // todo validate as valid zap request
@@ -59,7 +59,7 @@ pub(crate) async fn get_invoice_impl(
                 Some(multiplier_note) => (
                     sha256::Hash::hash(event.as_json().as_bytes()),
                     format!(
-                        "You bet {} your amount on Nostr Dice that the roll is lower than {}, nostr:{}",
+                        "You bet {} your amount on NostrDice that the roll is lower than {}, nostr:{}",
                         multiplier_note.multiplier.get_content(),
                         multiplier_note.multiplier.get_lower_than(),
                         zapped_note_id
