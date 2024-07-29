@@ -4,6 +4,7 @@ use crate::db::Zap;
 use crate::State;
 use crate::MAIN_KEY_NAME;
 use crate::NONCE_KEY_NAME;
+use crate::SOCIAL_KEY_NAME;
 use anyhow::bail;
 use anyhow::Context;
 use axum::extract::Path;
@@ -31,7 +32,103 @@ use std::fmt;
 use std::str::FromStr;
 use tonic_openssl_lnd::lnrpc;
 
-pub(crate) async fn get_invoice_impl(
+/// Returns an invoice if a user wants to play a game
+pub async fn get_invoice_for_game(
+    Query(params): Query<HashMap<String, String>>,
+    Extension(state): Extension<State>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let (amount_msats, zap_request) = match params.get("amount").and_then(|a| a.parse::<u64>().ok())
+    {
+        None => Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "status": "ERROR",
+                "reason": "Missing amount parameter",
+            })),
+        )),
+        Some(amount_msats) => {
+            let zap_request = params.get("nostr").map_or_else(
+                || Ok(None),
+                |event_str| {
+                    Event::from_json(event_str)
+                        .map_err(|_| {
+                            (
+                                StatusCode::BAD_REQUEST,
+                                Json(json!({
+                                    "status": "ERROR",
+                                    "reason": "Invalid zap request",
+                                })),
+                            )
+                        })
+                        .map(Some)
+                },
+            )?;
+
+            Ok((amount_msats, zap_request))
+        }
+    }?;
+
+    match get_invoice_for_game_impl(state, amount_msats, zap_request).await {
+        Ok(invoice) => Ok(Json(json!({
+            "pr": invoice,
+            "routers": []
+        }))),
+        Err(e) => {
+            tracing::error!("Failed to get invoice: {e:#}");
+            Err(handle_anyhow_error(e))
+        }
+    }
+}
+
+/// Returns an invoice if a user wants to zap us for donation reasons
+pub async fn get_invoice_for_zap(
+    Query(params): Query<HashMap<String, String>>,
+    Extension(state): Extension<State>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let (amount_msats, zap_request) = match params.get("amount").and_then(|a| a.parse::<u64>().ok())
+    {
+        None => Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "status": "ERROR",
+                "reason": "Missing amount parameter",
+            })),
+        )),
+        Some(amount_msats) => {
+            let zap_request = params.get("nostr").map_or_else(
+                || Ok(None),
+                |event_str| {
+                    Event::from_json(event_str)
+                        .map_err(|_| {
+                            (
+                                StatusCode::BAD_REQUEST,
+                                Json(json!({
+                                    "status": "ERROR",
+                                    "reason": "Invalid zap request",
+                                })),
+                            )
+                        })
+                        .map(Some)
+                },
+            )?;
+
+            Ok((amount_msats, zap_request))
+        }
+    }?;
+
+    match get_invoice_for_zap_impl(state, amount_msats, zap_request).await {
+        Ok(invoice) => Ok(Json(json!({
+            "pr": invoice,
+            "routers": []
+        }))),
+        Err(e) => {
+            tracing::error!("Failed to get invoice: {e:#}");
+            Err(handle_anyhow_error(e))
+        }
+    }
+}
+
+pub(crate) async fn get_invoice_for_game_impl(
     state: State,
     amount_msats: u64,
     zap_request: Option<Event>,
@@ -133,51 +230,45 @@ fn get_zapped_note_id(zap_request: &Event) -> anyhow::Result<EventId> {
     Ok(*zapped_note)
 }
 
-pub async fn get_invoice(
-    Query(params): Query<HashMap<String, String>>,
-    Extension(state): Extension<State>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let (amount_msats, zap_request) = match params.get("amount").and_then(|a| a.parse::<u64>().ok())
-    {
-        None => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "status": "ERROR",
-                "reason": "Missing amount parameter",
-            })),
-        )),
-        Some(amount_msats) => {
-            let zap_request = params.get("nostr").map_or_else(
-                || Ok(None),
-                |event_str| {
-                    Event::from_json(event_str)
-                        .map_err(|_| {
-                            (
-                                StatusCode::BAD_REQUEST,
-                                Json(json!({
-                                    "status": "ERROR",
-                                    "reason": "Invalid zap request",
-                                })),
-                            )
-                        })
-                        .map(Some)
-                },
-            )?;
+pub(crate) async fn get_invoice_for_zap_impl(
+    state: State,
+    amount_msats: u64,
+    zap_request: Option<Event>,
+) -> anyhow::Result<String> {
+    let mut lnd = state.lightning_client.clone();
+    let zap_request = match zap_request.as_ref() {
+        None => {
+            let request = lnrpc::Invoice {
+                value_msat: amount_msats as i64,
+                memo: "Donation to NostrDice".to_string(),
+                private: state.route_hints,
+                ..Default::default()
+            };
 
-            Ok((amount_msats, zap_request))
-        }
-    }?;
+            let resp = lnd.add_invoice(request).await?.into_inner();
 
-    match get_invoice_impl(state, amount_msats, zap_request).await {
-        Ok(invoice) => Ok(Json(json!({
-            "pr": invoice,
-            "routers": []
-        }))),
-        Err(e) => {
-            tracing::error!("Failed to get invoice: {e:#}");
-            Err(handle_anyhow_error(e))
+            return Ok(resp.payment_request);
         }
-    }
+        Some(event) => match event.kind() {
+            nostr::Kind::ZapRequest => event,
+            _ => bail!("Invalid Nostr event: not a zap request"),
+        },
+    };
+
+    let invoice = lnrpc::Invoice {
+        value_msat: amount_msats as i64,
+        description_hash: sha256::Hash::hash(zap_request.as_json().as_bytes())
+            .to_byte_array()
+            .to_vec(),
+        expiry: 60 * 5,
+        memo: "Thank you for the donation".to_string(),
+        private: state.route_hints,
+        ..Default::default()
+    };
+
+    let resp = lnd.add_invoice(invoice).await?.into_inner();
+
+    Ok(resp.payment_request)
 }
 
 pub async fn get_lnurl_pay(
@@ -190,9 +281,23 @@ pub async fn get_lnurl_pay(
     );
 
     let hash = sha256::Hash::hash(metadata.as_bytes());
-    let callback = format!("https://{}/get-invoice/{}", state.domain, hex::encode(hash));
 
-    let pk = state.main_keys.public_key();
+    tracing::debug!("Received request to zap for {name}");
+
+    let (pk, callback_url_path) = match name.as_str() {
+        MAIN_KEY_NAME => (state.main_keys.public_key(), "get-invoice-for-game"),
+        NONCE_KEY_NAME => (state.nonce_keys.public_key(), "get-invoice-for-zap"),
+        SOCIAL_KEY_NAME => (state.social_keys.public_key(), "get-invoice-for-zap"),
+        _ => (state.social_keys.public_key(), "get-invoice-for-zap"),
+    };
+
+    let callback = format!(
+        "https://{}/{}/{}",
+        state.domain,
+        callback_url_path,
+        hex::encode(hash)
+    );
+
     let pk = bitcoin::key::XOnlyPublicKey::from_slice(&pk.serialize()).expect("valid PK");
 
     let resp = PayResponse {
@@ -244,10 +349,18 @@ pub async fn get_nip05(
                 NONCE_KEY_NAME.to_string(),
                 state.nonce_keys.public_key().to_hex(),
             ),
+            (
+                SOCIAL_KEY_NAME.to_string(),
+                state.social_keys.public_key().to_hex(),
+            ),
         ]),
         relays: HashMap::from([
             (state.main_keys.public_key().to_hex(), state.relays.clone()),
             (state.nonce_keys.public_key().to_hex(), state.relays.clone()),
+            (
+                state.social_keys.public_key().to_hex(),
+                state.relays.clone(),
+            ),
         ]),
     };
     if let Some(name) = &params.name {
@@ -265,6 +378,16 @@ pub async fn get_nip05(
             NONCE_KEY_NAME => Ok(Json(Nip05Response {
                 names: HashMap::from([(
                     NONCE_KEY_NAME.to_string(),
+                    state.nonce_keys.public_key().to_hex(),
+                )]),
+                relays: HashMap::from([(
+                    state.nonce_keys.public_key().to_hex(),
+                    state.relays.clone(),
+                )]),
+            })),
+            SOCIAL_KEY_NAME => Ok(Json(Nip05Response {
+                names: HashMap::from([(
+                    SOCIAL_KEY_NAME.to_string(),
                     state.nonce_keys.public_key().to_hex(),
                 )]),
                 relays: HashMap::from([(

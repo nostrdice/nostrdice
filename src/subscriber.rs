@@ -91,6 +91,7 @@ async fn handle_paid_invoice(
             Ok(())
         }
         Some(mut zap) => {
+            tracing::warn!("Received a payment for a bet.");
             if zap.receipt_id.is_some() {
                 return Ok(());
             }
