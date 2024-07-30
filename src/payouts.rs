@@ -1,21 +1,3 @@
-// - no instant payout
-//
-// - publish multiplier notes once
-// - announce commitment and nonce reveal on different account
-//
-// roll = first_2_bytes_in_decimal(sha256(nonce | npub | memo))
-//
-// ## zap invoice
-//
-// User claims they are owed zap_amount * multiplier
-//
-// - amount
-// - description/m: nonce commitment noteId, nonce commitment, multiplier note id, roller's npub,
-//   memo
-// - signature proves that we approved this zap request
-//
-// ## payout invoice
-
 use crate::db;
 use crate::db::upsert_zap;
 use crate::db::BetState;
