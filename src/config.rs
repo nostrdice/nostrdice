@@ -41,6 +41,12 @@ pub struct Config {
     /// Location of multipliers file
     #[clap(long)]
     pub multipliers_file: String,
+    /// A nonce expires this long after creation.
+    #[clap(default_value_t = 60, long)]
+    pub expire_nonce_after_secs: u32,
+    /// A nonce is revealed this long after _expiration_.
+    #[clap(default_value_t = 60, long)]
+    pub reveal_nonce_after_secs: u32,
     /// If enabled logs will be in json format
     #[clap(short, long)]
     pub json: bool,
