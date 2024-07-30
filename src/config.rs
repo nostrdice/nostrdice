@@ -38,8 +38,6 @@ pub struct Config {
     #[arg(num_args(0..))]
     #[clap(long)]
     pub relay: Vec<String>,
-    #[clap(default_value_t = 60, long)]
-    pub round_interval_seconds: u32,
     /// Location of multipliers file
     #[clap(long)]
     pub multipliers_file: String,

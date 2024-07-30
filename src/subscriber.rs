@@ -1,8 +1,8 @@
-use crate::db;
 use crate::db::get_zap;
 use crate::db::upsert_zap;
+use crate::db::BetState;
+use crate::db::Zap;
 use crate::utils;
-use anyhow::Context;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
@@ -83,19 +83,23 @@ async fn handle_paid_invoice(
     keys: Keys,
     client: Client,
 ) -> anyhow::Result<()> {
-    let dice_roll = db::get_current_round(db)?.context("No active dice roll.")?;
-    let roll_event_id = dice_roll.event_id;
-
-    match get_zap(db, roll_event_id, payment_hash.clone())? {
+    match get_zap(db, payment_hash.clone())? {
         None => {
             tracing::warn!("Received a payment without bet.");
             Ok(())
         }
+        Some(Zap {
+            bet_state: BetState::ZapPaid,
+            ..
+        }) => {
+            tracing::warn!("Ignoring paid zap invoice that was already marked as paid.");
+            Ok(())
+        }
         Some(mut zap) => {
-            tracing::warn!("Received a payment for a bet.");
-            if zap.receipt_id.is_some() {
-                return Ok(());
-            }
+            // At this stage, this `Zap` indicates that the roller has placed their bet. We will
+            // determine their outcome as soon as their nonce is revealed.
+            zap.bet_state = BetState::ZapPaid;
+            upsert_zap(db, payment_hash, zap.clone())?;
 
             let preimage = zap.request.id.to_bytes();
             let invoice_hash = bitcoin::hashes::sha256::Hash::hash(&preimage);
@@ -146,12 +150,9 @@ async fn handle_paid_invoice(
             // wants the zap receipt on isn't already part of our relay list.
 
             tracing::info!(
-                "Broadcasted event id: {}!",
-                event_id.to_bech32().expect("bech32")
+                event_id = event_id.to_bech32().expect("bech32"),
+                "Broadcasted zap receipt",
             );
-
-            zap.receipt_id = Some(event_id.to_bech32().expect("bech32"));
-            upsert_zap(db, roll_event_id, payment_hash, zap)?;
 
             Ok(())
         }

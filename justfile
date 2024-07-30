@@ -1,4 +1,3 @@
-
 # Path of the MULTIPLIER_FILE
 MULTIPLIER_FILE := "./data/multipliers.yml"
 
