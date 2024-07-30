@@ -48,6 +48,7 @@ mod multiplier;
 mod round;
 mod routes;
 mod subscriber;
+mod utils;
 mod zapper;
 
 pub const MAIN_KEY_NAME: &str = "main";

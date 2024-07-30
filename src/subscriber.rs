@@ -1,6 +1,7 @@
 use crate::db;
 use crate::db::get_zap;
 use crate::db::upsert_zap;
+use crate::utils;
 use anyhow::Context;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
@@ -129,7 +130,20 @@ async fn handle_paid_invoice(
             )
             .to_event(&keys)?;
 
+            // if the request specifies relays we must broadcast the zap receipt to these relays as
+            // well.
+            let relays = utils::get_relays(&zap.request)?;
+            client.add_relays(relays.clone()).await?;
+            for relay in relays {
+                client.connect_relay(relay).await?;
+            }
+
             let event_id = client.send_event(event).await?;
+
+            // TODO: not sure if we should now disconnect the potentially newly added relays, but I
+            // am opting not to for now, as I do not want to risk disconnecting from a relay we
+            // need. Note, we would need to add some logic to check if the relay that the roller
+            // wants the zap receipt on isn't already part of our relay list.
 
             tracing::info!(
                 "Broadcasted event id: {}!",
