@@ -72,6 +72,7 @@ pub struct State {
     pub client: Client,
     pub multipliers: Multipliers,
     pub relays: Vec<String>,
+    pub reveal_nonce_after_secs: u64,
 }
 
 #[tokio::main]
@@ -221,6 +222,7 @@ async fn main() -> anyhow::Result<()> {
         client: client.clone(),
         multipliers: multipliers.clone(),
         relays,
+        reveal_nonce_after_secs: config.reveal_nonce_after_secs as u64,
     };
 
     let addr: std::net::SocketAddr = format!("{}:{}", config.bind, config.port)
@@ -252,6 +254,8 @@ async fn main() -> anyhow::Result<()> {
         nonce_keys.clone(),
         state.db.clone(),
         revealed_round_tx,
+        config.expire_nonce_after_secs as u64,
+        config.reveal_nonce_after_secs as u64,
     ));
 
     // Invoice event stream

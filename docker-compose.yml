@@ -121,6 +121,8 @@ services:
       - --cert-file=/config/tls.cert
       - --macaroon-file=/config/admin.macaroon
       - --multipliers-file=/data/multipliers.yml
+      - --expire-nonce-after-secs=30
+      - --reveal-nonce-after-secs=30
     networks:
       - nostr-dice-network
 

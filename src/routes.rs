@@ -2,7 +2,6 @@ use crate::db::upsert_zap;
 use crate::db::BetState;
 use crate::db::Zap;
 use crate::multiplier::MultiplierNote;
-use crate::nonce;
 use crate::nonce::get_active_nonce;
 use crate::nonce::nonce_commitment;
 use crate::utils;
@@ -221,7 +220,7 @@ pub(crate) async fn get_invoice_for_game_impl(
     let invoice = lnrpc::Invoice {
         value_msat: amount_msats as i64,
         // Once an active nonce has expired, this is how long it will take us to reveal it.
-        expiry: nonce::REVEAL_AFTER.as_secs() as i64,
+        expiry: state.reveal_nonce_after_secs as i64,
         memo,
         private: state.route_hints,
         ..Default::default()
