@@ -3,6 +3,7 @@ use crate::db::upsert_zap;
 use crate::db::BetState;
 use crate::db::Zap;
 use crate::multiplier::Multipliers;
+use anyhow::bail;
 use nostr::bitcoin::hashes::sha256;
 use nostr::bitcoin::hashes::HashEngine;
 use nostr::prelude::ZapType;
@@ -50,122 +51,14 @@ async fn pay_out_winners(
 
     for zap in db::get_zaps_by_event_id(&db, round.event_id)? {
         match &zap {
-            Zap {
-                roller,
-                invoice,
-                multiplier_note_id,
-                request,
+            zap @ Zap {
                 bet_state: BetState::ZapPaid,
                 ..
             } => {
-                let roller_npub = roller.to_bech32().expect("npub");
-
-                let roll = generate_roll(round.nonce, *roller, request.content.clone());
-
-                let multiplier = match multipliers
-                    .0
-                    .iter()
-                    .find(|note| &note.note_id == multiplier_note_id)
+                if let Err(e) =
+                    payout_winner(&db, zap, client.clone(), multipliers.clone(), round.nonce).await
                 {
-                    Some(note) => &note.multiplier,
-                    None => {
-                        tracing::error!(?zap, %roller_npub, "Zap for unknown multiplier note ID");
-                        continue;
-                    }
-                };
-
-                let threshold = multiplier.get_lower_than();
-                if roll >= threshold {
-                    tracing::debug!(
-                        %roller_npub,
-                        "Roller did not win this time. \
-                         Aimed for <{threshold}, got {roll}"
-                    );
-
-                    send_dm(
-                        &client,
-                        roller,
-                        format!(
-                            "You lost. You rolled {roll}, which was \
-                             bigger than {threshold}. Try again!"
-                        ),
-                    )
-                    .await;
-
-                    let zap = Zap {
-                        bet_state: BetState::Loser,
-                        ..zap.clone()
-                    };
-                    if let Err(e) = upsert_zap(&db, invoice.payment_hash().to_string(), zap) {
-                        tracing::error!(
-                            %roller_npub,
-                            "Failed to set BetState to Loser. Error: {e:#}"
-                        );
-                    }
-
-                    continue;
-                }
-
-                send_dm(
-                    &client,
-                    roller,
-                    format!(
-                        "You won. You rolled {roll}, \
-                         which was lower than {threshold}."
-                    ),
-                )
-                .await;
-
-                tracing::info!(
-                    %roller_npub,
-                    "Roller is a winner! Aimed for <{threshold}, got {roll}"
-                );
-
-                let zap_amount_msat = invoice
-                    .amount_milli_satoshis()
-                    .expect("amount to be present");
-                let amount_sat =
-                    calculate_price_money(zap_amount_msat, multiplier.get_multiplier());
-
-                tracing::debug!(
-                    %roller_npub,
-                    "Sending {} * {} = {amount_sat} to {roller_npub} for hitting a {} multiplier",
-                    zap_amount_msat / 1_000,
-                    multiplier.get_multiplier(),
-                    multiplier.get_content()
-                );
-
-                let zap_details = ZapDetails::new(ZapType::Public).message(
-                    format!("Won a {}x bet on NostrDice!", multiplier.get_multiplier()).to_string(),
-                );
-
-                let zap =
-                    if let Err(e) = client.zap(zap.roller, amount_sat, Some(zap_details)).await {
-                        tracing::error!(%roller_npub, "Failed to zap. Error: {e:#}");
-
-                        send_dm(
-                            &client,
-                            roller,
-                            "Sorry, we failed to zap you your payout.".to_string(),
-                        )
-                        .await;
-
-                        Zap {
-                            bet_state: BetState::ZapFailed,
-                            ..zap.clone()
-                        }
-                    } else {
-                        Zap {
-                            bet_state: BetState::PaidWinner,
-                            ..zap.clone()
-                        }
-                    };
-
-                if let Err(e) = upsert_zap(&db, invoice.payment_hash().to_string(), zap) {
-                    tracing::error!(
-                        %roller_npub,
-                        "Failed to set BetState to PaidWinner. Error: {e:#}"
-                    );
+                    tracing::error!(roller=%zap.roller, ?zap, "Failed to payout. Error: {e:#}");
                 }
             }
             Zap {
@@ -181,6 +74,109 @@ async fn pay_out_winners(
     }
 
     Ok(())
+}
+
+async fn payout_winner(
+    db: &Db,
+    zap: &Zap,
+    client: Client,
+    multipliers: Multipliers,
+    nonce: [u8; 32],
+) -> anyhow::Result<()> {
+    let Zap {
+        roller,
+        request,
+        multiplier_note_id,
+        invoice,
+        ..
+    } = zap;
+    let roller_npub = roller.to_bech32().expect("npub");
+
+    let roll = generate_roll(nonce, *roller, request.content.clone());
+
+    let multiplier = match multipliers
+        .0
+        .iter()
+        .find(|note| &note.note_id == multiplier_note_id)
+    {
+        Some(note) => &note.multiplier,
+        None => {
+            bail!("Zap for unknown multiplier note ID. roller_npub={roller_npub}, zap={zap:?}");
+        }
+    };
+
+    let threshold = multiplier.get_lower_than();
+    if roll >= threshold {
+        tracing::debug!(
+            %roller_npub,
+            "Roller did not win this time. \
+             Aimed for <{threshold}, got {roll}"
+        );
+
+        send_dm(
+            &client,
+            roller,
+            format!("You lost. You rolled {roll}, which was bigger than {threshold}. Try again!"),
+        )
+        .await;
+
+        let zap = Zap {
+            bet_state: BetState::Loser,
+            ..zap.clone()
+        };
+        upsert_zap(db, invoice.payment_hash().to_string(), zap)?;
+    }
+
+    send_dm(
+        &client,
+        roller,
+        format!("You won. You rolled {roll}, which was lower than {threshold}."),
+    )
+    .await;
+
+    tracing::info!(
+        %roller_npub,
+        "Roller is a winner! Aimed for <{threshold}, got {roll}"
+    );
+
+    let zap_amount_msat = invoice
+        .amount_milli_satoshis()
+        .expect("amount to be present");
+    let amount_sat = calculate_price_money(zap_amount_msat, multiplier.get_multiplier());
+
+    tracing::debug!(
+        %roller_npub,
+        "Sending {} * {} = {amount_sat} to {roller_npub} for hitting a {} multiplier",
+        zap_amount_msat / 1_000,
+        multiplier.get_multiplier(),
+        multiplier.get_content()
+    );
+
+    let zap_details = ZapDetails::new(ZapType::Public)
+        .message(format!("Won a {}x bet on NostrDice!", multiplier.get_multiplier()).to_string());
+
+    let zap = if let Err(e) = client.zap(zap.roller, amount_sat, Some(zap_details)).await {
+        tracing::error!(%roller_npub, "Failed to zap. Error: {e:#}");
+
+        send_dm(
+            &client,
+            roller,
+            "Sorry, we failed to zap you your payout.".to_string(),
+        )
+        .await;
+
+        Zap {
+            bet_state: BetState::ZapFailed,
+            ..zap.clone()
+        }
+    } else {
+        Zap {
+            bet_state: BetState::PaidWinner,
+            ..zap.clone()
+        }
+    };
+
+    upsert_zap(db, invoice.payment_hash().to_string(), zap)
 }
 
 async fn send_dm(client: &Client, to: &PublicKey, message: String) {
