@@ -3,7 +3,6 @@ use crate::multiplier::Multiplier;
 use crate::multiplier::MultiplierNote;
 use crate::multiplier::Multipliers;
 use crate::nonce::manage_nonces;
-use crate::payouts::manage_payouts;
 use crate::routes::*;
 use crate::subscriber::start_invoice_subscription;
 use crate::zapper::start_zapper;
@@ -247,13 +246,10 @@ async fn main() -> anyhow::Result<()> {
 
     let server = axum::Server::bind(&addr).serve(server_router.into_make_service());
 
-    let revealed_round_tx = manage_payouts(state.db.clone(), client.clone(), multipliers);
-
     spawn(manage_nonces(
         client.clone(),
         nonce_keys.clone(),
         state.db.clone(),
-        revealed_round_tx,
         config.expire_nonce_after_secs as u64,
         config.reveal_nonce_after_secs as u64,
     ));
@@ -264,6 +260,7 @@ async fn main() -> anyhow::Result<()> {
         state.lightning_client.clone(),
         main_keys.clone(),
         client.clone(),
+        multipliers,
     ));
 
     let graceful = server.with_graceful_shutdown(async {
