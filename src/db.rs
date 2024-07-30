@@ -24,6 +24,7 @@ pub struct Zap {
 pub enum BetState {
     ZapInvoiceRequested,
     ZapPaid,
+    ZapFailed,
     PaidWinner,
     Loser,
 }
