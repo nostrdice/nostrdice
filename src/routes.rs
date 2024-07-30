@@ -165,7 +165,7 @@ fn zap_invoice_memo(
          to multiply your wager by {}. nonce_commitment_note_id: {nonce_commitment_note_id}, \
          nonce_commitment: {nonce_commitment}, multiplier_note_id: {multiplier_note_id}, \
          roller_npub: {roller_npub}, memo_hash: {memo_hash}",
-        amount_msats * 1_000,
+        amount_msats / 1_000,
         multiplier_note.multiplier.get_lower_than(),
         multiplier_note.multiplier.get_content(),
     )
