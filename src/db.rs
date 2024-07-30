@@ -17,6 +17,7 @@ pub struct Zap {
     pub multiplier_note_id: String,
     pub nonce_commitment_note_id: EventId,
     pub bet_state: BetState,
+    pub index: usize,
 }
 
 /// The state of a roller's bet.

@@ -1,3 +1,4 @@
+use crate::db;
 use crate::db::upsert_zap;
 use crate::db::BetState;
 use crate::db::Zap;
@@ -150,6 +151,7 @@ fn zap_invoice_memo(
     roller_npub: PublicKey,
     zap_memo: String,
     amount_msats: u64,
+    index: usize,
 ) -> String {
     let nonce_commitment_note_id = nonce_commitment_note_id.to_bech32().expect("valid note");
 
@@ -163,7 +165,7 @@ fn zap_invoice_memo(
         "Bet {} sats that you will roll a number smaller than {}, \
          to multiply your wager by {}. nonce_commitment_note_id: {nonce_commitment_note_id}, \
          nonce_commitment: {nonce_commitment}, multiplier_note_id: {multiplier_note_id}, \
-         roller_npub: {roller_npub}, memo_hash: {memo_hash}",
+         roller_npub: {roller_npub}, memo_hash: {memo_hash}, index: {index}",
         amount_msats / 1_000,
         multiplier_note.multiplier.get_lower_than(),
         multiplier_note.multiplier.get_content(),
@@ -209,6 +211,15 @@ pub(crate) async fn get_invoice_for_game_impl(
     // Better check that we are taking bets before adding the zap invoice.
     let round = get_active_nonce(&state.db)?.context("Cannot accept zap without active nonce")?;
 
+    // TODO: we could run into a race condition calculating the index, if the user would try to zap
+    // very fast multiple times.
+    let zaps = db::get_zaps_by_event_id(&state.db, round.event_id)?;
+    let index = zaps
+        .iter()
+        .filter(|z| z.roller == zap_request.pubkey)
+        .collect::<Vec<_>>()
+        .len();
+
     let memo = zap_invoice_memo(
         round.event_id,
         nonce_commitment(round.nonce),
@@ -216,6 +227,7 @@ pub(crate) async fn get_invoice_for_game_impl(
         zap_request.author(),
         zap_request.content.clone(),
         amount_msats,
+        index,
     );
     let invoice = lnrpc::Invoice {
         value_msat: amount_msats as i64,
@@ -237,6 +249,7 @@ pub(crate) async fn get_invoice_for_game_impl(
         multiplier_note_id: multiplier_note.note_id,
         nonce_commitment_note_id: round.event_id,
         bet_state: BetState::ZapInvoiceRequested,
+        index,
     };
 
     // At this stage, this `Zap` indicates the roller's _intention_ to bet. They have until the zap

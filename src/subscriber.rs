@@ -2,7 +2,11 @@ use crate::db::get_zap;
 use crate::db::upsert_zap;
 use crate::db::BetState;
 use crate::db::Zap;
+use crate::multiplier::Multipliers;
+use crate::nonce;
+use crate::payouts;
 use crate::utils;
+use anyhow::bail;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
@@ -24,6 +28,7 @@ pub async fn start_invoice_subscription(
     mut lnd: LndLightningClient,
     key: Keys,
     client: Client,
+    multipliers: Multipliers,
 ) {
     loop {
         tracing::info!("Starting invoice subscription");
@@ -46,12 +51,14 @@ pub async fn start_invoice_subscription(
                     let key = key.clone();
                     tokio::spawn({
                         let client = client.clone();
+                        let multipliers = multipliers.clone();
                         async move {
                             let fut = handle_paid_invoice(
                                 &db,
                                 hex::encode(ln_invoice.r_hash),
                                 key.clone(),
                                 client,
+                                multipliers.clone(),
                             );
 
                             match tokio::time::timeout(Duration::from_secs(30), fut).await {
@@ -82,6 +89,7 @@ async fn handle_paid_invoice(
     payment_hash: String,
     keys: Keys,
     client: Client,
+    multipliers: Multipliers,
 ) -> anyhow::Result<()> {
     match get_zap(db, payment_hash.clone())? {
         None => {
@@ -153,6 +161,18 @@ async fn handle_paid_invoice(
                 event_id = event_id.to_bech32().expect("bech32"),
                 "Broadcasted zap receipt",
             );
+
+            match nonce::get_active_nonce(db)? {
+                Some(round) => {
+                    tracing::info!(
+                        nonce_commitment_note_id = round.get_note_id(),
+                        "Time to roll the dice"
+                    );
+                    payouts::roll_the_die(db, &zap, client, multipliers, round.nonce, zap.index)
+                        .await?;
+                }
+                None => bail!("Failed to payout winner: No active round."),
+            }
 
             Ok(())
         }
