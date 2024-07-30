@@ -194,7 +194,7 @@ impl Nonce {
     }
 }
 
-fn nonce_commitment(nonce: [u8; 32]) -> sha256::Hash {
+pub fn nonce_commitment(nonce: [u8; 32]) -> sha256::Hash {
     let mut hasher = sha256::Hash::engine();
     hasher.input(&nonce);
 

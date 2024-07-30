@@ -1,8 +1,10 @@
 use crate::db::upsert_zap;
 use crate::db::BetState;
 use crate::db::Zap;
+use crate::multiplier::MultiplierNote;
 use crate::nonce;
 use crate::nonce::get_active_nonce;
+use crate::nonce::nonce_commitment;
 use crate::utils;
 use crate::State;
 use crate::MAIN_KEY_NAME;
@@ -15,14 +17,16 @@ use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::Extension;
 use axum::Json;
-use bitcoin::hashes::sha256;
-use bitcoin::hashes::Hash;
 use lightning_invoice::Bolt11Invoice;
 use lnurl::pay::PayResponse;
 use lnurl::Tag;
+use nostr::bitcoin::hashes::sha256;
 use nostr::Event;
 use nostr::JsonUtil;
 use nostr::ToBech32;
+use nostr_sdk::hashes::Hash;
+use nostr_sdk::EventId;
+use nostr_sdk::PublicKey;
 use serde::de;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -129,6 +133,44 @@ pub async fn get_invoice_for_zap(
     }
 }
 
+/// The roller's zap invoice memo specifies the terms of the bet.
+///
+/// The roller can verify the terms of the bet before sending the
+/// payment. To do this, they must:
+///
+/// - Check that the `multiplier_note_id` corresponds to their chosen
+/// multiplier.
+///
+/// - Check that the `roller_npub` matches their own npub.
+///
+/// - Check that the `memo_hash` matches the hash of their zap memo.
+fn zap_invoice_memo(
+    nonce_commitment_note_id: EventId,
+    nonce_commitment: sha256::Hash,
+    multiplier_note: MultiplierNote,
+    roller_npub: PublicKey,
+    zap_memo: String,
+    amount_msats: u64,
+) -> String {
+    let nonce_commitment_note_id = nonce_commitment_note_id.to_bech32().expect("valid note");
+
+    let multiplier_note_id = multiplier_note.note_id;
+
+    let roller_npub = roller_npub.to_bech32().expect("valid npub");
+
+    let memo_hash = sha256::Hash::hash(zap_memo.as_bytes());
+
+    format!(
+        "Bet {} sats that you will roll a number smaller than {}, \
+         to multiply your wager by {}. nonce_commitment_note_id: {nonce_commitment_note_id}, \
+         nonce_commitment: {nonce_commitment}, multiplier_note_id: {multiplier_note_id}, \
+         roller_npub: {roller_npub}, memo_hash: {memo_hash}",
+        amount_msats * 1_000,
+        multiplier_note.multiplier.get_lower_than(),
+        multiplier_note.multiplier.get_content(),
+    )
+}
+
 pub(crate) async fn get_invoice_for_game_impl(
     state: State,
     amount_msats: u64,
@@ -137,18 +179,7 @@ pub(crate) async fn get_invoice_for_game_impl(
     let mut lnd = state.lightning_client.clone();
     let zap_request = match zap_request.as_ref() {
         // TODO: Maybe we should get rid of this branch altogether.
-        None => {
-            let request = lnrpc::Invoice {
-                value_msat: amount_msats as i64,
-                memo: "Donation to NostrDice".to_string(),
-                private: state.route_hints,
-                ..Default::default()
-            };
-
-            let resp = lnd.add_invoice(request).await?.into_inner();
-
-            return Ok(resp.payment_request);
-        }
+        None => bail!("Cannot play the game without a zap request"),
         Some(event) => match event.kind() {
             // TODO: Validate as valid zap request.
             nostr::Kind::ZapRequest => event,
@@ -176,28 +207,25 @@ pub(crate) async fn get_invoice_for_game_impl(
         );
     }
 
-    // TODO: Must commit to a lot more things to avoid forged fraud proofs.
+    // Better check that we are taking bets before adding the zap invoice.
+    let round = get_active_nonce(&state.db)?.context("Cannot accept zap without active nonce")?;
+
+    let memo = zap_invoice_memo(
+        round.event_id,
+        nonce_commitment(round.nonce),
+        multiplier_note.clone(),
+        zap_request.author(),
+        zap_request.content.clone(),
+        amount_msats,
+    );
     let invoice = lnrpc::Invoice {
         value_msat: amount_msats as i64,
-        description_hash: sha256::Hash::hash(zap_request.as_json().as_bytes())
-            .to_byte_array()
-            .to_vec(),
         // Once an active nonce has expired, this is how long it will take us to reveal it.
         expiry: nonce::REVEAL_AFTER.as_secs() as i64,
-        memo: format!(
-            "Bet {} sats that you will roll a number smaller than {}, \
-             to multiply your wager by {}. nostr:{}",
-            amount_msats * 1_000,
-            multiplier_note.multiplier.get_lower_than(),
-            multiplier_note.multiplier.get_content(),
-            zapped_note_id
-        ),
+        memo,
         private: state.route_hints,
         ..Default::default()
     };
-
-    // Better check that we are taking bets before adding the zap invoice.
-    let round = get_active_nonce(&state.db)?.context("Cannot accept zap without active nonce")?;
 
     let resp = lnd.add_invoice(invoice).await?.into_inner();
 
