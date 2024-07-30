@@ -100,25 +100,15 @@ async fn pay_out_winners(
                          Aimed for <{threshold}, got {roll}"
                     );
 
-                    // the send_private_message function (NIP17) seems to be not supported by
-                    // major nostr clients.
-                    #[allow(deprecated)]
-                    if let Err(e) = client
-                        .send_direct_msg(
-                            *roller,
-                            format!(
-                                "You lost. You rolled {roll}, which was bigger \
-                                 than {threshold}. Try again!"
-                            ),
-                            None,
-                        )
-                        .await
-                    {
-                        tracing::error!(
-                            %roller_npub,
-                            "Failed to send private message. Error: {e:#}"
-                        );
-                    }
+                    send_dm(
+                        &client,
+                        roller,
+                        format!(
+                            "You lost. You rolled {roll}, which was \
+                             bigger than {threshold}. Try again!"
+                        ),
+                    )
+                    .await;
 
                     let zap = Zap {
                         bet_state: BetState::Loser,
@@ -134,19 +124,15 @@ async fn pay_out_winners(
                     continue;
                 }
 
-                // the send_private_message function (NIP17) seems to be not supported by major
-                // nostr clients.
-                #[allow(deprecated)]
-                if let Err(e) = client
-                    .send_direct_msg(
-                        *roller,
-                        format!("You won. You rolled {roll}, which was lower than {threshold}."),
-                        None,
-                    )
-                    .await
-                {
-                    tracing::error!(%roller_npub, "Failed to send private message. Error: {e:#}");
-                }
+                send_dm(
+                    &client,
+                    roller,
+                    format!(
+                        "You won. You rolled {roll}, \
+                         which was lower than {threshold}."
+                    ),
+                )
+                .await;
 
                 tracing::info!(
                     %roller_npub,
@@ -171,17 +157,28 @@ async fn pay_out_winners(
                     format!("Won a {}x bet on NostrDice!", multiplier.get_multiplier()).to_string(),
                 );
 
-                if let Err(e) = client.zap(zap.roller, amount_sat, Some(zap_details)).await {
-                    tracing::error!(%roller_npub, "Failed to zap. Error: {e:#}");
+                let zap =
+                    if let Err(e) = client.zap(zap.roller, amount_sat, Some(zap_details)).await {
+                        tracing::error!(%roller_npub, "Failed to zap. Error: {e:#}");
 
-                    // TODO: Send a message to the user that we have not been able to
-                    // payout.
-                }
+                        send_dm(
+                            &client,
+                            roller,
+                            "Sorry, we failed to zap you your payout.".to_string(),
+                        )
+                        .await;
 
-                let zap = Zap {
-                    bet_state: BetState::PaidWinner,
-                    ..zap.clone()
-                };
+                        Zap {
+                            bet_state: BetState::ZapFailed,
+                            ..zap.clone()
+                        }
+                    } else {
+                        Zap {
+                            bet_state: BetState::PaidWinner,
+                            ..zap.clone()
+                        }
+                    };
+
                 if let Err(e) = upsert_zap(&db, invoice.payment_hash().to_string(), zap) {
                     tracing::error!(
                         %roller_npub,
@@ -202,6 +199,19 @@ async fn pay_out_winners(
     }
 
     Ok(())
+}
+
+async fn send_dm(client: &Client, to: &PublicKey, message: String) {
+    let npub = to.to_bech32().expect("npub");
+
+    // The `send_private_message` function (NIP17) seems to be not supported by major nostr clients.
+    #[allow(deprecated)]
+    if let Err(e) = client.send_direct_msg(*to, message, None).await {
+        tracing::error!(
+            %npub,
+            "Failed to send DM: {e:#}"
+        );
+    }
 }
 
 pub fn calculate_price_money(amount_msat: u64, multiplier: f32) -> u64 {
