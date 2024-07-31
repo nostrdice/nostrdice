@@ -27,7 +27,7 @@ docker:
     docker exec -u 0 -it nostrdice update-ca-certificates
 
 wipe:
-    rm {{MULTIPLIER_FILE}}
+    rm -f {{MULTIPLIER_FILE}}
     docker compose down -v
 
 create-channel:
