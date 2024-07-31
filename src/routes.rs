@@ -417,10 +417,10 @@ pub async fn get_nip05(
             SOCIAL_KEY_NAME => Ok(Json(Nip05Response {
                 names: HashMap::from([(
                     SOCIAL_KEY_NAME.to_string(),
-                    state.nonce_keys.public_key().to_hex(),
+                    state.social_keys.public_key().to_hex(),
                 )]),
                 relays: HashMap::from([(
-                    state.nonce_keys.public_key().to_hex(),
+                    state.social_keys.public_key().to_hex(),
                     state.relays.clone(),
                 )]),
             })),
