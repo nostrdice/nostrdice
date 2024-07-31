@@ -63,6 +63,8 @@ pub async fn roll_the_die(
             ..zap.clone()
         };
         upsert_zap(db, invoice.payment_hash().to_string(), zap)?;
+
+        return Ok(())
     }
 
     send_dm(
