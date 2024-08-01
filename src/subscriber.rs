@@ -6,7 +6,6 @@ use crate::multiplier::Multipliers;
 use crate::nonce;
 use crate::payouts;
 use crate::utils;
-use anyhow::bail;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
@@ -14,9 +13,11 @@ use lightning_invoice::Currency;
 use lightning_invoice::InvoiceBuilder;
 use lightning_invoice::PaymentSecret;
 use nostr::prelude::ToBech32;
+use nostr::Event;
 use nostr::EventBuilder;
 use nostr::Keys;
 use nostr_sdk::Client;
+use nostr_sdk::Options;
 use sled::Db;
 use std::time::Duration;
 use tonic_openssl_lnd::lnrpc;
@@ -172,28 +173,43 @@ async fn handle_paid_invoice(
             )
             .to_event(&keys)?;
 
-            // if the request specifies relays we must broadcast the zap receipt to these relays as
-            // well.
-            let relays = utils::get_relays(&zap.request)?;
-            client.add_relays(relays.clone()).await?;
-            for relay in relays {
-                client.connect_relay(relay).await?;
-            }
-
-            let event_id = client.send_event(event).await?;
-
-            // TODO: not sure if we should now disconnect the potentially newly added relays, but I
-            // am opting not to for now, as I do not want to risk disconnecting from a relay we
-            // need. Note, we would need to add some logic to check if the relay that the roller
-            // wants the zap receipt on isn't already part of our relay list.
+            let event_id = client.send_event(event.clone()).await?;
 
             tracing::info!(
                 event_id = event_id.to_bech32().expect("bech32"),
                 "Broadcasted zap receipt",
             );
 
+            tokio::spawn({
+                // broadcast zap receipt to client relays.
+                async move {
+                    if let Err(e) = broadcast_to_client_relays(zap.request, event, keys).await {
+                        tracing::warn!(
+                            "Failed to broadcast zap receipt to client relays! Error: {e:#}"
+                        );
+                    }
+                }
+            });
 
             Ok(())
         }
     }
+}
+
+pub async fn broadcast_to_client_relays(
+    zap_request: Event,
+    zap_receipt: Event,
+    keys: Keys,
+) -> anyhow::Result<()> {
+    tracing::info!("Broadcasting zap receipt to client relays");
+    let client = Client::with_opts(keys, Options::new().timeout(Duration::from_secs(5)));
+
+    let relays = utils::get_relays(&zap_request)?;
+    client.add_relays(relays.clone()).await?;
+    for relay in relays {
+        client.connect_relay(relay).await?;
+    }
+
+    client.send_event(zap_receipt).await?;
+    Ok(())
 }
