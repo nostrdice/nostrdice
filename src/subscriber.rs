@@ -109,6 +109,36 @@ async fn handle_paid_invoice(
             zap.bet_state = BetState::ZapPaid;
             upsert_zap(db, payment_hash, zap.clone())?;
 
+            tokio::spawn({
+                let db = db.clone();
+                let client = client.clone();
+                let zap = zap.clone();
+                async move {
+                    match nonce::get_active_nonce(&db) {
+                        Ok(Some(round)) => {
+                            tracing::info!(
+                                nonce_commitment_note_id = round.get_note_id(),
+                                "Time to roll the dice"
+                            );
+                            if let Err(e) = payouts::roll_the_die(
+                                &db,
+                                &zap,
+                                client,
+                                multipliers,
+                                round.nonce,
+                                zap.index,
+                            )
+                            .await
+                            {
+                                tracing::error!("Failed to roll the die. Error: {e:#}");
+                            }
+                        }
+                        Ok(None) => tracing::error!("Failed to payout winner: No active round."),
+                        Err(e) => tracing::error!("Failed to get active nonce round. Error: {e:#}"),
+                    }
+                }
+            });
+
             let preimage = zap.request.id.to_bytes();
             let invoice_hash = bitcoin::hashes::sha256::Hash::hash(&preimage);
 
@@ -162,17 +192,6 @@ async fn handle_paid_invoice(
                 "Broadcasted zap receipt",
             );
 
-            match nonce::get_active_nonce(db)? {
-                Some(round) => {
-                    tracing::info!(
-                        nonce_commitment_note_id = round.get_note_id(),
-                        "Time to roll the dice"
-                    );
-                    payouts::roll_the_die(db, &zap, client, multipliers, round.nonce, zap.index)
-                        .await?;
-                }
-                None => bail!("Failed to payout winner: No active round."),
-            }
 
             Ok(())
         }
