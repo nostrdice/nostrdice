@@ -32,6 +32,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::spawn;
+use tokio::sync::broadcast;
 use tonic_openssl_lnd::lnrpc::GetInfoRequest;
 use tonic_openssl_lnd::lnrpc::GetInfoResponse;
 use tonic_openssl_lnd::LndLightningClient;
@@ -248,12 +249,26 @@ async fn main() -> anyhow::Result<()> {
 
     let server = axum::Server::bind(&addr).serve(server_router.into_make_service());
 
-    spawn(manage_nonces(
+    let (ctrl_c_tx, mut ctrl_c_rx) = {
+        let (tx, rx) = broadcast::channel(1);
+        let tx_clone = tx.clone();
+        spawn(async move {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to listen for Ctrl+C shutdown signal");
+            tracing::warn!("Ctrl-C pressed; sending stop");
+            tx_clone.send(()).expect("failed to send Ctrl+C signal via broadcast channel");
+        });
+        (tx, rx)
+    };
+
+    let manage_nonces = spawn(manage_nonces(
         client.clone(),
         nonce_keys.clone(),
         state.db.clone(),
         config.expire_nonce_after_secs as u64,
         config.reveal_nonce_after_secs as u64,
+        ctrl_c_tx.subscribe()
     ));
 
     // Invoice event stream
@@ -277,14 +292,21 @@ async fn main() -> anyhow::Result<()> {
     ));
 
     let graceful = server.with_graceful_shutdown(async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to create Ctrl+C shutdown signal");
+        let _ = ctrl_c_rx.recv().await;
     });
 
     // Await the server to receive the shutdown signal
-    if let Err(e) = graceful.await {
-        tracing::error!("shutdown error: {}", e);
+
+    let (graceful, manage_nonces) = tokio::join!(graceful, manage_nonces);
+
+    if let Err(e) = graceful {
+        tracing::error!("shutdown error in server: {}", e);
+    }
+
+    match manage_nonces {
+        Ok(Err(e)) => tracing::error!("shutdown error in manage_nonces task: {}", e),
+        Err(e) => tracing::error!("shutdown error in manage_nonces task: {}", e),
+        _ => (),
     }
 
     client.disconnect().await?;
