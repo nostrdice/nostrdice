@@ -57,7 +57,7 @@ async fn post_social_inner(
     let winners = filter_zaps(&multipliers, &zaps, BetState::PaidWinner);
 
     if winners.is_empty() {
-        tracing::debug!("No winners in this round, not positing anything");
+        tracing::debug!("No winners in this round, not posting anything");
         return Ok(());
     }
 
