@@ -7,6 +7,7 @@ use anyhow::Result;
 use nostr::EventBuilder;
 use nostr::EventId;
 use nostr::PublicKey;
+use nostr::ToBech32;
 use sled::Db;
 use time::Duration;
 use time::OffsetDateTime;
@@ -65,7 +66,7 @@ async fn post_social_inner(
     let msg = format!("Winner winner, chicken dinner! Thank you to everyone who played in the last {} minutes. Out of {} participants, {} of you won some sweet sats. Congrats!", time_window_minutes, winners.len() + losers.len(), winners.len());
     let closing_message = format!(
         "Do you have what it takes? Follow nostr:{} for another round and nostr:{} for the published nonces",
-        game, nonce
+        game.to_bech32().expect("npub"), nonce.to_bech32().expect("npub")
     );
     let winners = format_winners(winners);
     let losers = format_losers(losers);
@@ -111,7 +112,7 @@ fn format_winners(winners: Vec<(PublicKey, Multiplier, u64)>) -> String {
     for (pubkey, multiplier, amount) in winners {
         message.push_str(&format!(
             "- nostr:{}: won {} x {}sats \n",
-            pubkey,
+            pubkey.to_bech32().expect("npub"),
             multiplier.get_multiplier(),
             amount / 1000
         ));
@@ -124,7 +125,7 @@ fn format_losers(players: Vec<(PublicKey, Multiplier, u64)>) -> String {
     }
     let mut message = String::from("Losers - please try again:\n");
     for (pubkey, _, _) in players {
-        message.push_str(&format!("- nostr:{}\n", pubkey,));
+        message.push_str(&format!("- nostr:{}\n", pubkey.to_bech32().expect("npub")));
     }
     message
 }
