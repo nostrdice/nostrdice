@@ -6,6 +6,7 @@ use nostr::ToBech32;
 use serde::Deserialize;
 use serde::Serialize;
 use sled::Db;
+use time::OffsetDateTime;
 
 /// The record of a roller's bet.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,10 +19,12 @@ pub struct Zap {
     pub nonce_commitment_note_id: EventId,
     pub bet_state: BetState,
     pub index: usize,
+    /// Timestamp when the user place his bet
+    pub bet_timestamp: OffsetDateTime,
 }
 
 /// The state of a roller's bet.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BetState {
     ZapInvoiceRequested,
     ZapPaid,
@@ -69,6 +72,29 @@ pub fn get_zap(db: &Db, payment_hash: String) -> anyhow::Result<Option<Zap>> {
         }
         None => Ok(None),
     }
+}
+
+/// Returns the zaps within a timewindow
+pub fn get_zaps_in_time_window(
+    db: &Db,
+    start_time: OffsetDateTime,
+    end_time: OffsetDateTime,
+) -> anyhow::Result<Vec<Zap>> {
+    let zap_tree = db.open_tree("zaps")?;
+
+    let zaps = zap_tree
+        .iter()
+        .filter_map(|e| match serde_json::from_slice::<Zap>(&e.expect("").1) {
+            Ok(zap) => Some(zap),
+            Err(e) => {
+                tracing::error!("Failed to deserialize zap: {e}");
+                None
+            }
+        })
+        .filter(|zap| zap.bet_timestamp > start_time && zap.bet_timestamp < end_time)
+        .collect::<Vec<_>>();
+
+    Ok(zaps)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

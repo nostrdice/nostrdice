@@ -10,9 +10,9 @@ A round of NostrDice goes like this:
 
 1. The server announces the start of a round by publishing a commitment to a nonce on Nostr.
 2. A player zaps a note to select their multiplier e.g. 2x.
-The higher the multiplier, the lower the winning probability.
-For example, 2x has a 48.5% winning probability; and 25x has a 3.88% winning probability.
-The zap amount determines the size of the player's wager e.g. 10000 sats.
+   The higher the multiplier, the lower the winning probability.
+   For example, 2x has a 48.5% winning probability; and 25x has a 3.88% winning probability.
+   The zap amount determines the size of the player's wager e.g. 10000 sats.
 3. Using the nonce and some information provided by the player, the server computes the rolled number (in the range 0-65535).
 4. If the rolled number hits the player's target, the server zaps back the player their winnings e.g. 2 x 10000 = 20000 sats.
 5. After the round ends, the server reveals the nonce on Nostr.
