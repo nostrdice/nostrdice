@@ -4,6 +4,7 @@ use crate::multiplier::MultiplierNote;
 use crate::multiplier::Multipliers;
 use crate::nonce::manage_nonces;
 use crate::routes::*;
+use crate::social_updates::post_social_updates;
 use crate::subscriber::start_invoice_subscription;
 use crate::zapper::start_zapper;
 use crate::zapper::LndZapper;
@@ -47,6 +48,7 @@ mod multiplier;
 mod nonce;
 mod payouts;
 mod routes;
+mod social_updates;
 mod subscriber;
 mod utils;
 mod zapper;
@@ -260,7 +262,17 @@ async fn main() -> anyhow::Result<()> {
         state.lightning_client.clone(),
         main_keys.clone(),
         client.clone(),
+        multipliers.clone(),
+    ));
+
+    // Post social updates about winners
+    spawn(post_social_updates(
+        client.clone(),
+        social_keys.clone(),
+        state.db.clone(),
         multipliers,
+        main_keys.public_key(),
+        nonce_keys.public_key(),
     ));
 
     let graceful = server.with_graceful_shutdown(async {

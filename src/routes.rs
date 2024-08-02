@@ -35,6 +35,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+use time::OffsetDateTime;
 use tonic_openssl_lnd::lnrpc;
 
 /// Returns an invoice if a user wants to play a game
@@ -250,6 +251,7 @@ pub(crate) async fn get_invoice_for_game_impl(
         nonce_commitment_note_id: round.event_id,
         bet_state: BetState::ZapInvoiceRequested,
         index,
+        bet_timestamp: OffsetDateTime::now_utc(),
     };
 
     // At this stage, this `Zap` indicates the roller's _intention_ to bet. They have until the zap
