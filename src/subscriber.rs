@@ -110,6 +110,21 @@ async fn handle_paid_invoice(
             zap.bet_state = BetState::ZapPaid;
             upsert_zap(db, payment_hash, zap.clone())?;
 
+            let og_client = client.clone();
+            let options = Options::default();
+            let client = Client::with_opts(
+                og_client.signer().await?,
+                options
+                    .wait_for_send(true)
+                    .send_timeout(Some(Duration::from_secs(20))),
+            );
+            let relays = og_client.relays().await;
+            let relays = relays.keys();
+            client.add_relays(relays).await?;
+            client.add_relays(utils::get_relays(&zap.request)?).await?;
+            client.connect().await;
+            client.set_zapper(og_client.zapper().await?).await;
+
             tokio::spawn({
                 let db = db.clone();
                 let client = client.clone();
@@ -183,7 +198,7 @@ async fn handle_paid_invoice(
             tokio::spawn({
                 // broadcast zap receipt to client relays.
                 async move {
-                    if let Err(e) = broadcast_to_client_relays(zap.request, event, keys).await {
+                    if let Err(e) = broadcast_to_client_relays(event, client).await {
                         tracing::warn!(
                             "Failed to broadcast zap receipt to client relays! Error: {e:#}"
                         );
@@ -196,19 +211,8 @@ async fn handle_paid_invoice(
     }
 }
 
-pub async fn broadcast_to_client_relays(
-    zap_request: Event,
-    zap_receipt: Event,
-    keys: Keys,
-) -> anyhow::Result<()> {
+pub async fn broadcast_to_client_relays(zap_receipt: Event, client: Client) -> anyhow::Result<()> {
     tracing::info!("Broadcasting zap receipt to client relays");
-    let client = Client::with_opts(keys, Options::new().timeout(Duration::from_secs(5)));
-
-    let relays = utils::get_relays(&zap_request)?;
-    client.add_relays(relays.clone()).await?;
-    for relay in relays {
-        client.connect_relay(relay).await?;
-    }
 
     client.send_event(zap_receipt).await?;
     Ok(())
