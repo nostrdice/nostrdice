@@ -50,6 +50,9 @@ pub struct Config {
     /// If enabled logs will be in json format
     #[clap(short, long)]
     pub json: bool,
+    /// Time after which we will post a summary of all winners
+    #[clap(default_value_t = 60, long)]
+    pub social_updates_time_window_minutes: u64,
 }
 
 impl Config {

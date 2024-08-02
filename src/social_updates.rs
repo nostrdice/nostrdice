@@ -12,9 +12,6 @@ use time::Duration;
 use time::OffsetDateTime;
 use tokio::time::sleep;
 
-/// Time window of positing updates on social
-const TIME_WINDOW: u64 = 60;
-
 /// Posts updates on nostr every {TIME_WINDOW}minutes.
 pub async fn post_social_updates(
     client: nostr_sdk::Client,
@@ -23,6 +20,7 @@ pub async fn post_social_updates(
     multipliers: Multipliers,
     game: PublicKey,
     nonce: PublicKey,
+    time_window_minutes: u64,
 ) {
     loop {
         if let Err(err) = post_social_inner(
@@ -32,12 +30,13 @@ pub async fn post_social_updates(
             multipliers.clone(),
             game,
             nonce,
+            time_window_minutes,
         )
         .await
         {
             tracing::error!("Could not post social update {err:#}");
         }
-        sleep(tokio::time::Duration::from_secs(TIME_WINDOW * 60)).await;
+        sleep(tokio::time::Duration::from_secs(time_window_minutes * 60)).await;
     }
 }
 
@@ -48,9 +47,10 @@ async fn post_social_inner(
     multipliers: Multipliers,
     game: PublicKey,
     nonce: PublicKey,
+    time_window_minutes: u64,
 ) -> Result<()> {
     let now = OffsetDateTime::now_utc();
-    let last_announcement_cut_off = now - Duration::minutes(TIME_WINDOW);
+    let last_announcement_cut_off = now - Duration::minutes(time_window_minutes as i64);
     let zaps = db::get_zaps_in_time_window(&db, last_announcement_cut_off, now)?;
 
     let winners = filter_zaps(&multipliers, &zaps, BetState::PaidWinner);
@@ -62,7 +62,7 @@ async fn post_social_inner(
 
     let losers = filter_zaps(&multipliers, &zaps, BetState::Loser);
 
-    let msg = format!("Winner winner, chicken dinner. Thank you for all the participants in the last {} minutes. We had {} participants of which {} won somethings.", TIME_WINDOW, winners.len() + losers.len(), winners.len());
+    let msg = format!("Winner winner, chicken dinner. Thank you for all the participants in the last {} minutes. We had {} participants of which {} won somethings.", time_window_minutes, winners.len() + losers.len(), winners.len());
     let closing_message = format!(
         "Follow nostr:{} for another round and nostr:{} for the published nonces",
         game, nonce

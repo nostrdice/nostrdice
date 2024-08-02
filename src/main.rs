@@ -273,6 +273,7 @@ async fn main() -> anyhow::Result<()> {
         multipliers,
         main_keys.public_key(),
         nonce_keys.public_key(),
+        config.social_updates_time_window_minutes,
     ));
 
     let graceful = server.with_graceful_shutdown(async {
