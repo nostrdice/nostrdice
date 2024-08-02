@@ -80,7 +80,7 @@ pub async fn get_invoice_for_game(
             "routers": []
         }))),
         Err(e) => {
-            tracing::error!("Failed to get invoice: {e:#}");
+            tracing::error!("Failed to get invoice for game zap: {e:#}");
             Err(handle_anyhow_error(e))
         }
     }
@@ -128,7 +128,7 @@ pub async fn get_invoice_for_zap(
             "routers": []
         }))),
         Err(e) => {
-            tracing::error!("Failed to get invoice: {e:#}");
+            tracing::error!("Failed to get invoice for normal zap: {e:#}");
             Err(handle_anyhow_error(e))
         }
     }
@@ -249,7 +249,7 @@ pub(crate) async fn get_invoice_for_game_impl(
         request: zap_request.clone(),
         multiplier_note_id: multiplier_note.note_id,
         nonce_commitment_note_id: round.event_id,
-        bet_state: BetState::ZapInvoiceRequested,
+        bet_state: BetState::GameZapInvoiceRequested,
         index,
         bet_timestamp: OffsetDateTime::now_utc(),
     };
@@ -298,6 +298,22 @@ pub(crate) async fn get_invoice_for_zap_impl(
     };
 
     let resp = lnd.add_invoice(invoice).await?.into_inner();
+
+    let invoice = Bolt11Invoice::from_str(&resp.payment_request)?;
+
+    let zap = Zap {
+        roller: zap_request.pubkey,
+        invoice,
+        request: zap_request.clone(),
+        multiplier_note_id: String::new(),
+        nonce_commitment_note_id: EventId::all_zeros(),
+        bet_state: BetState::ZapInvoiceRequested,
+        index: 0,
+        bet_timestamp: OffsetDateTime::now_utc(),
+    };
+
+    // invoice's expiry to complete the bet.
+    upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
 
     Ok(resp.payment_request)
 }
