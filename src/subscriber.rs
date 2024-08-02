@@ -195,25 +195,7 @@ async fn handle_paid_invoice(
                 "Broadcasted zap receipt",
             );
 
-            tokio::spawn({
-                // broadcast zap receipt to client relays.
-                async move {
-                    if let Err(e) = broadcast_to_client_relays(event, client).await {
-                        tracing::warn!(
-                            "Failed to broadcast zap receipt to client relays! Error: {e:#}"
-                        );
-                    }
-                }
-            });
-
             Ok(())
         }
     }
-}
-
-pub async fn broadcast_to_client_relays(zap_receipt: Event, client: Client) -> anyhow::Result<()> {
-    tracing::info!("Broadcasting zap receipt to client relays");
-
-    client.send_event(zap_receipt).await?;
-    Ok(())
 }
