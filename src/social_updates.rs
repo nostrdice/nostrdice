@@ -62,7 +62,7 @@ async fn post_social_inner(
 
     let losers = filter_zaps(&multipliers, &zaps, BetState::Loser);
 
-    let msg = format!("Winner winner, chicken dinner. Thank you for all the participants in the last {} minutes. We had {} participants of which {} won some sweet sats.", time_window_minutes, winners.len() + losers.len(), winners.len());
+    let msg = format!("Winner winner, chicken dinner! Thank you to everyone who played in the last {} minutes. Out of {} participants, {} of you won some sweet sats. Congrats!", time_window_minutes, winners.len() + losers.len(), winners.len());
     let closing_message = format!(
         "Do you have what it takes? Follow nostr:{} for another round and nostr:{} for the published nonces",
         game, nonce
