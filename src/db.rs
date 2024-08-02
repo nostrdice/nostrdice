@@ -26,6 +26,7 @@ pub struct Zap {
 /// The state of a roller's bet.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BetState {
+    GameZapInvoiceRequested,
     ZapInvoiceRequested,
     ZapPaid,
     ZapFailed,

@@ -11,6 +11,12 @@ all:
     # Create nostr profiles for roller and nostrdice
     just create-nostr-profiles
 
+    # Print the multiplier notes
+    just print-multipliers
+
+print-multipliers:
+    cat {{MULTIPLIER_FILE}}
+
 docker:
     docker compose up alice bob nostr-rs-relay -d
 
