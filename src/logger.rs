@@ -21,14 +21,14 @@ pub fn init_tracing(level: LevelFilter, json_format: bool) -> Result<()> {
 
     let mut filter = EnvFilter::new("")
         .add_directive(Directive::from(level))
-        .add_directive("sled=warn".parse()?)
         .add_directive("nostr_relay_pool=warn".parse()?)
         .add_directive("rustls::client=warn".parse()?)
         .add_directive("h2=warn".parse()?)
         .add_directive("hyper_util::client::legacy=warn".parse()?)
         .add_directive("nostr::nips::nip11=info".parse()?)
         .add_directive("hyper::proto=warn".parse()?)
-        .add_directive("atomic_destructor=warn".parse()?);
+        .add_directive("atomic_destructor=warn".parse()?)
+        .add_directive("sqlx=info".parse()?);
 
     // Parse additional log directives from env variable
     let filter = match std::env::var_os(RUST_LOG_ENV).map(|s| s.into_string()) {

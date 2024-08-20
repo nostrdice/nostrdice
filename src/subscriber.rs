@@ -19,14 +19,14 @@ use nostr::EventId;
 use nostr::Keys;
 use nostr_sdk::Client;
 use nostr_sdk::Options;
-use sled::Db;
+use sqlx::SqlitePool;
 use std::time::Duration;
 use tonic_openssl_lnd::lnrpc;
 use tonic_openssl_lnd::lnrpc::invoice::InvoiceState;
 use tonic_openssl_lnd::LndLightningClient;
 
 pub async fn start_invoice_subscription(
-    db: Db,
+    db: SqlitePool,
     mut lnd: LndLightningClient,
     key: Keys,
     client: Client,
@@ -87,13 +87,13 @@ pub async fn start_invoice_subscription(
 }
 
 async fn handle_paid_invoice(
-    db: &Db,
+    db: &SqlitePool,
     payment_hash: String,
     keys: Keys,
     client: Client,
     multipliers: Multipliers,
-) -> anyhow::Result<()> {
-    match get_zap(db, payment_hash.clone())? {
+) -> Result<()> {
+    match get_zap(db, payment_hash.clone()).await? {
         None => {
             tracing::warn!("Received a payment without bet.");
             Ok(())
@@ -131,7 +131,7 @@ async fn handle_paid_invoice(
             // At this stage, this `Zap` indicates that the roller has placed their bet. We will
             // determine their outcome as soon as their nonce is revealed.
             zap.bet_state = BetState::ZapPaid;
-            upsert_zap(db, payment_hash, zap.clone())?;
+            upsert_zap(db, payment_hash, zap.clone()).await?;
 
             let client = ephermal_client(client, &mut zap).await?;
 
@@ -140,7 +140,7 @@ async fn handle_paid_invoice(
                 let client = client.clone();
                 let zap = zap.clone();
                 async move {
-                    match nonce::get_active_nonce(&db) {
+                    match nonce::get_active_nonce(&db).await {
                         Ok(Some(round)) => {
                             tracing::info!(
                                 nonce_commitment_note_id = round.get_note_id(),

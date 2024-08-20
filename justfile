@@ -34,6 +34,7 @@ docker:
 
 wipe:
     rm -f {{MULTIPLIER_FILE}}
+    rm -f data/zaps.db
     docker compose down -v
 
 create-channel:

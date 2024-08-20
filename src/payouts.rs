@@ -11,10 +11,10 @@ use nostr_sdk::client::ZapDetails;
 use nostr_sdk::hashes::Hash;
 use nostr_sdk::Client;
 use nostr_sdk::PublicKey;
-use sled::Db;
+use sqlx::SqlitePool;
 
 pub async fn roll_the_die(
-    db: &Db,
+    db: &SqlitePool,
     zap: &Zap,
     client: Client,
     multipliers: Multipliers,
@@ -62,7 +62,7 @@ pub async fn roll_the_die(
             bet_state: BetState::Loser,
             ..zap.clone()
         };
-        upsert_zap(db, invoice.payment_hash().to_string(), zap)?;
+        upsert_zap(db, invoice.payment_hash().to_string(), zap).await?;
 
         return Ok(());
     }
@@ -116,7 +116,8 @@ pub async fn roll_the_die(
         }
     };
 
-    upsert_zap(db, invoice.payment_hash().to_string(), zap)
+    upsert_zap(db, invoice.payment_hash().to_string(), zap).await?;
+    Ok(())
 }
 
 async fn send_dm(client: &Client, to: &PublicKey, message: String) {

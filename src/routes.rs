@@ -210,11 +210,14 @@ pub(crate) async fn get_invoice_for_game_impl(
     }
 
     // Better check that we are taking bets before adding the zap invoice.
-    let round = get_active_nonce(&state.db)?.context("Cannot accept zap without active nonce")?;
+    let round = get_active_nonce(&state.db)
+        .await?
+        .context("Cannot accept zap without active nonce")?;
 
     // TODO: we could run into a race condition calculating the index, if the user would try to zap
     // very fast multiple times.
-    let zaps = db::get_zaps_by_event_id(&state.db, round.event_id)?;
+    let zaps = db::get_zaps_by_event_id(&state.db, round.event_id).await?;
+
     let index = zaps
         .iter()
         .filter(|z| z.roller == zap_request.pubkey)
@@ -256,7 +259,7 @@ pub(crate) async fn get_invoice_for_game_impl(
 
     // At this stage, this `Zap` indicates the roller's _intention_ to bet. They have until the zap
     // invoice's expiry to complete the bet.
-    upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
+    upsert_zap(&state.db, hex::encode(resp.r_hash), zap).await?;
 
     Ok(resp.payment_request)
 }
@@ -313,7 +316,7 @@ pub(crate) async fn get_invoice_for_zap_impl(
     };
 
     // invoice's expiry to complete the bet.
-    upsert_zap(&state.db, hex::encode(resp.r_hash), zap)?;
+    upsert_zap(&state.db, hex::encode(resp.r_hash), zap).await?;
 
     Ok(resp.payment_request)
 }

@@ -8,6 +8,7 @@ use crate::social_updates::post_social_updates;
 use crate::subscriber::start_invoice_subscription;
 use crate::zapper::start_zapper;
 use crate::zapper::LndZapper;
+use anyhow::Context;
 use axum::http;
 use axum::http::Method;
 use axum::http::StatusCode;
@@ -24,13 +25,14 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::from_reader;
 use serde_json::to_string;
-use sled::Db;
+use sqlx::SqlitePool;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
+use sqlx::sqlite::SqliteConnectOptions;
 use tokio::spawn;
 use tokio::sync::broadcast;
 use tonic_openssl_lnd::lnrpc::GetInfoRequest;
@@ -60,7 +62,7 @@ pub const SOCIAL_KEY_NAME: &str = "social";
 
 #[derive(Clone)]
 pub struct State {
-    pub db: Db,
+    pub db: SqlitePool,
     pub lightning_client: LndLightningClient,
     pub router_client: LndRouterClient,
     /// The keys for the account posting the multiplier notes
@@ -114,7 +116,15 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // DB management
-    let db = sled::open(&db_path)?;
+    let db = SqlitePool::connect_with(
+        SqliteConnectOptions::new()
+            .filename(db_path)
+            .create_if_missing(true)
+    )
+        .await
+        .context("Failed to open database file")?;
+
+    sqlx::migrate!("./migrations").run(&db).await?;
 
     let (main_keys_path, nonce_keys_path, social_keys_path) = {
         let mut main_keys_path = path.clone();
@@ -257,7 +267,9 @@ async fn main() -> anyhow::Result<()> {
                 .await
                 .expect("failed to listen for Ctrl+C shutdown signal");
             tracing::warn!("Ctrl-C pressed; sending stop");
-            tx_clone.send(()).expect("failed to send Ctrl+C signal via broadcast channel");
+            tx_clone
+                .send(())
+                .expect("failed to send Ctrl+C signal via broadcast channel");
         });
         (tx, rx)
     };
@@ -268,7 +280,7 @@ async fn main() -> anyhow::Result<()> {
         state.db.clone(),
         config.expire_nonce_after_secs as u64,
         config.reveal_nonce_after_secs as u64,
-        ctrl_c_tx.subscribe()
+        ctrl_c_tx.subscribe(),
     ));
 
     // Invoice event stream

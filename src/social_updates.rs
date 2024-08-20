@@ -8,7 +8,7 @@ use nostr::EventBuilder;
 use nostr::EventId;
 use nostr::PublicKey;
 use nostr::ToBech32;
-use sled::Db;
+use sqlx::SqlitePool;
 use time::Duration;
 use time::OffsetDateTime;
 use tokio::time::sleep;
@@ -17,7 +17,7 @@ use tokio::time::sleep;
 pub async fn post_social_updates(
     client: nostr_sdk::Client,
     keys: nostr::Keys,
-    db: Db,
+    db: SqlitePool,
     multipliers: Multipliers,
     game: PublicKey,
     nonce: PublicKey,
@@ -44,7 +44,7 @@ pub async fn post_social_updates(
 async fn post_social_inner(
     client: nostr_sdk::Client,
     keys: nostr::Keys,
-    db: Db,
+    db: SqlitePool,
     multipliers: Multipliers,
     game: PublicKey,
     nonce: PublicKey,
@@ -52,7 +52,7 @@ async fn post_social_inner(
 ) -> Result<()> {
     let now = OffsetDateTime::now_utc();
     let last_announcement_cut_off = now - Duration::minutes(time_window_minutes as i64);
-    let zaps = db::get_zaps_in_time_window(&db, last_announcement_cut_off, now)?;
+    let zaps = db::get_zaps_in_time_window(&db, last_announcement_cut_off, now).await?;
 
     let winners = filter_zaps(&multipliers, &zaps, BetState::PaidWinner);
 
