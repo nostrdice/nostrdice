@@ -6,6 +6,7 @@ use crate::multiplier::Multipliers;
 use crate::nonce;
 use crate::payouts;
 use crate::utils;
+use anyhow::Context;
 use anyhow::Result;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
@@ -36,54 +37,69 @@ pub async fn start_invoice_subscription(
         tracing::info!("Starting invoice subscription");
 
         let sub = lnrpc::InvoiceSubscription::default();
-        let mut invoice_stream = lnd
-            .subscribe_invoices(sub)
-            .await
-            .expect("Failed to start invoice subscription")
-            .into_inner();
+        if let Err(e) = start_subscription(&mut lnd, sub, &db, &key, &client, &multipliers).await {
+            tracing::error!("Invoice subscription died: {e:#}");
+        };
+    }
+}
 
-        while let Some(ln_invoice) = invoice_stream
-            .message()
-            .await
-            .expect("Failed to receive invoices")
-        {
-            match InvoiceState::from_i32(ln_invoice.state) {
-                Some(InvoiceState::Settled) => {
-                    let db = db.clone();
-                    let key = key.clone();
-                    tokio::spawn({
-                        let client = client.clone();
-                        let multipliers = multipliers.clone();
-                        async move {
-                            let fut = handle_paid_invoice(
-                                &db,
-                                hex::encode(ln_invoice.r_hash),
-                                key.clone(),
-                                client,
-                                multipliers.clone(),
-                            );
+async fn start_subscription(
+    lnd: &mut LndLightningClient,
+    sub: lnrpc::InvoiceSubscription,
+    db: &Db,
+    key: &Keys,
+    client: &Client,
+    multipliers: &Multipliers,
+) -> Result<()> {
+    let mut invoice_stream = lnd
+        .subscribe_invoices(sub)
+        .await
+        .context("Failed to start invoice subscription")?
+        .into_inner();
 
-                            match tokio::time::timeout(Duration::from_secs(30), fut).await {
-                                Ok(Ok(_)) => {
-                                    tracing::info!("Handled paid invoice!");
-                                }
-                                Ok(Err(e)) => {
-                                    tracing::error!("Failed to handle paid invoice: {}", e);
-                                }
-                                Err(_) => {
-                                    tracing::error!("Timeout");
-                                }
+    while let Some(ln_invoice) = invoice_stream
+        .message()
+        .await
+        .context("Failed to receive invoices")?
+    {
+        match InvoiceState::from_i32(ln_invoice.state) {
+            Some(InvoiceState::Settled) => {
+                let db = db.clone();
+                let key = key.clone();
+                tokio::spawn({
+                    let client = client.clone();
+                    let multipliers = multipliers.clone();
+                    async move {
+                        let fut = handle_paid_invoice(
+                            &db,
+                            hex::encode(ln_invoice.r_hash),
+                            key.clone(),
+                            client,
+                            multipliers.clone(),
+                        );
+
+                        match tokio::time::timeout(Duration::from_secs(30), fut).await {
+                            Ok(Ok(_)) => {
+                                tracing::info!("Handled paid invoice!");
+                            }
+                            Ok(Err(e)) => {
+                                tracing::error!("Failed to handle paid invoice: {}", e);
+                            }
+                            Err(_) => {
+                                tracing::error!("Timeout");
                             }
                         }
-                    });
-                }
-                None
-                | Some(InvoiceState::Canceled)
-                | Some(InvoiceState::Open)
-                | Some(InvoiceState::Accepted) => {}
+                    }
+                });
             }
+            None
+            | Some(InvoiceState::Canceled)
+            | Some(InvoiceState::Open)
+            | Some(InvoiceState::Accepted) => {}
         }
     }
+
+    Ok(())
 }
 
 async fn handle_paid_invoice(
