@@ -1,7 +1,5 @@
 use crate::db;
 use crate::db::Round;
-use crate::db::RoundRow;
-use anyhow::Context;
 use anyhow::Result;
 use nostr::bitcoin::hashes::sha256;
 use nostr::Tag;
@@ -43,20 +41,20 @@ struct Nonce {
 /// Steps:
 ///
 /// 1. Check if there was a previous active nonce i.e. a nonce that was not expired before the last
-/// restart. If so, expire it and reveal it, triggering relevant payouts. It's hard to know if there
-/// was any time left, so it's better to move on.
+///    restart. If so, expire it and reveal it, triggering relevant payouts. It's hard to know if there
+///    was any time left, so it's better to move on.
 ///
 /// 2. Check if there was a previous expired nonce i.e. a nonce that was expired but not revealed
-/// before the last restart. If so, reveal it, triggering relevant payouts.
+///    before the last restart. If so, reveal it, triggering relevant payouts.
 ///
 /// 3. Generate a new nonce, mark it as the active nonce and publish its nonce commitment. Any new
-/// zaps will be linked to this nonce.
+///    zaps will be linked to this nonce.
 ///
 /// 4. Wait until the active nonce expires.
 ///
 /// 5. After the active nonce expires, spawn a task to reveal the nonce after
-/// the scheduled delay. The delay allows for rollers who bet close to nonce expiry to have enough
-/// time to pay their invoice.
+///    the scheduled delay. The delay allows for rollers who bet close to nonce expiry to have enough
+///    time to pay their invoice.
 ///
 /// 6. Go back to step 3.
 ///

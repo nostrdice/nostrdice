@@ -140,7 +140,7 @@ pub async fn get_invoice_for_zap(
 /// payment. To do this, they must:
 ///
 /// - Check that the `multiplier_note_id` corresponds to their chosen
-/// multiplier.
+///   multiplier.
 ///
 /// - Check that the `roller_npub` matches their own npub.
 ///
