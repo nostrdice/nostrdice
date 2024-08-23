@@ -2,6 +2,8 @@ FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 # We do not need openssl to build the bin
 RUN apt-get update && apt-get install -y cmake libdlib-dev libblas-dev liblapack-dev
 WORKDIR /app
+COPY migrations migrations
+RUN cargo install sqlx-cli
 
 FROM chef AS planner
 COPY . .
@@ -13,7 +15,8 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
-RUN cargo build --release --bin nostr-dice
+RUN DATABASE_URL=sqlite:zaps.db sqlx db create && DATABASE_URL=sqlite:zaps.db sqlx migrate run
+RUN DATABASE_URL=sqlite:zaps.db cargo build --release --bin nostr-dice
 
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime

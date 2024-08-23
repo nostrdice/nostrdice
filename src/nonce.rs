@@ -1,5 +1,6 @@
-use std::ops::ControlFlow;
 use crate::db;
+use crate::db::Round;
+use crate::db::RoundRow;
 use anyhow::Context;
 use anyhow::Result;
 use nostr::bitcoin::hashes::sha256;
@@ -14,7 +15,10 @@ use rand::thread_rng;
 use rand::Rng;
 use rand::RngCore;
 use rand::SeedableRng;
-use sled::Db;
+use sqlx::query;
+use sqlx::query_as;
+use sqlx::SqlitePool;
+use std::ops::ControlFlow;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::broadcast;
@@ -62,14 +66,14 @@ struct Nonce {
 pub async fn manage_nonces(
     client: nostr_sdk::Client,
     keys: nostr::Keys,
-    db: Db,
+    db: SqlitePool,
     expire_after_secs: u64,
     reveal_after_secs: u64,
     mut ctrl_c: broadcast::Receiver<()>,
 ) -> Result<()> {
     // Immediately unset the nonce, so that we do not use a nonce that may have been revealed
     // already. This also ensures that we pay out any winners.
-    if let Some(round) = unset_active_nonce(&db)? {
+    if let Some(round) = unset_active_nonce(&db).await? {
         // We may have already revealed this nonce before the restart, but doing so again does not
         // hurt.
         if let Err(e) = reveal_nonce(&client, &keys, round.nonce, round.event_id).await {
@@ -83,7 +87,7 @@ pub async fn manage_nonces(
 
     // Ensure that we reveal the latest expired nonce. This also ensures that we pay out any
     // winners.
-    if let Some(round) = get_latest_expired_nonce(&db)? {
+    if let Some(round) = get_latest_expired_nonce(&db).await? {
         // We may have already revealed this nonce before the restart, but doing so again does not
         // hurt.
         if let Err(e) = reveal_nonce(&client, &keys, round.nonce, round.event_id).await {
@@ -113,10 +117,12 @@ pub async fn manage_nonces(
                 nonce: active_nonce.inner,
                 event_id: commitment_event_id,
             },
-        ) {
+        )
+        .await
+        {
             tracing::error!("Failed to set active nonce: {e:#}");
 
-            if let Err(e) = unset_active_nonce(&db) {
+            if let Err(e) = unset_active_nonce(&db).await {
                 tracing::error!("Failed to unset active nonce. This is bad! Error: {e:#}");
             }
 
@@ -143,7 +149,9 @@ pub async fn manage_nonces(
                 nonce: active_nonce.inner,
                 event_id: commitment_event_id,
             },
-        ) {
+        )
+        .await
+        {
             tracing::error!(
                 nonce = hex::encode(active_nonce.inner),
                 "Failed to set latest expired nonce: {e:#}. This could cause problems after an \
@@ -160,14 +168,16 @@ pub async fn manage_nonces(
             ));
         } else {
             tracing::info!("Revealing nonce now due to Ctrl+C");
-            if let Err(e) = reveal_nonce(&client, &keys, active_nonce.inner, commitment_event_id).await {
+            if let Err(e) =
+                reveal_nonce(&client, &keys, active_nonce.inner, commitment_event_id).await
+            {
                 tracing::error!(
                     nonce = hex::encode(active_nonce.inner),
                     "Failed to reveal nonce: {e:#}. Must publish manually"
                 );
             }
 
-            if let Err(e) = unset_active_nonce(&db) {
+            if let Err(e) = unset_active_nonce(&db).await {
                 tracing::error!(
                     "Failed to unset active nonce during shutdown: {e:#}. This could be bad!"
                 );
@@ -271,73 +281,85 @@ async fn reveal_nonce(
     Ok(())
 }
 
-pub fn get_active_nonce(db: &Db) -> anyhow::Result<Option<db::Round>> {
-    let nonce_tree = db.open_tree("nonce")?;
-    let active_nonce = nonce_tree.get("active".as_bytes())?;
-
-    let event_id: EventId = match active_nonce {
-        Some(event_id) => serde_json::from_slice(&event_id)?,
-        None => return Ok(None),
-    };
-
-    let round = nonce_tree
-        .get(event_id.as_bytes())?
-        .context("Could not find active nonce")?;
-    let round = serde_json::from_slice(&round)?;
-
-    Ok(Some(round))
+pub async fn get_active_nonce(db: &SqlitePool) -> Result<Option<Round>> {
+    sqlx::query_as!(
+        RoundRow,
+        r#"SELECT nonces.event_id, nonces.nonce FROM active_nonce
+            JOIN nonces ON nonces.event_id = active_nonce.nonce_event_id;"#
+    )
+    .try_map(Round::try_from)
+    .fetch_optional(db)
+    .await
+    .context("Failed to get active nonce")
 }
 
-pub fn set_active_nonce(db: &Db, round: db::Round) -> anyhow::Result<()> {
-    let nonce_tree = db.open_tree("nonce")?;
-    let value = serde_json::to_vec(&round)?;
-    nonce_tree.insert(round.event_id.as_bytes(), value)?;
+pub async fn set_active_nonce(db: &SqlitePool, round: Round) -> Result<()> {
+    let event_id = round.event_id.to_hex();
+    let nonce = hex::encode(&round.nonce);
 
-    let value = serde_json::to_vec(&round.event_id)?;
-    nonce_tree.insert("active".as_bytes(), value)?;
+    query!(
+        "INSERT INTO nonces (event_id, nonce) VALUES (?1, ?2);",
+        event_id,
+        nonce,
+    )
+    .execute(db)
+    .await?;
+
+    query!(
+        "INSERT INTO active_nonce (id, nonce_event_id) VALUES (?1, ?2)
+            ON CONFLICT(id) DO UPDATE SET nonce_event_id = excluded.nonce_event_id;",
+        0,
+        event_id,
+    )
+    .execute(db)
+    .await?;
 
     Ok(())
 }
 
-pub fn unset_active_nonce(db: &Db) -> anyhow::Result<Option<db::Round>> {
-    let nonce_tree = db.open_tree("nonce")?;
-    let active_nonce = nonce_tree.remove("active".as_bytes())?;
+pub async fn unset_active_nonce(db: &SqlitePool) -> Result<Option<db::Round>> {
+    let id = query!("DELETE FROM active_nonce RETURNING nonce_event_id;")
+        .fetch_optional(db)
+        .await?
+        .map(|r| r.nonce_event_id);
 
-    let event_id: EventId = match active_nonce {
-        Some(event_id) => serde_json::from_slice(&event_id)?,
-        None => return Ok(None),
-    };
-
-    let round = nonce_tree
-        .get(event_id.as_bytes())?
-        .context("Could not find active nonce")?;
-    let round = serde_json::from_slice(&round)?;
-
-    Ok(Some(round))
+    match id {
+        None => Ok(None),
+        Some(id) => query_as!(
+            RoundRow,
+            "SELECT event_id, nonce FROM nonces WHERE event_id = ?1",
+            id,
+        )
+        .try_map(Round::try_from)
+        .fetch_optional(db)
+        .await
+        .context("Failed to get active nonce"),
+    }
 }
 
-pub fn set_latest_expired_nonce(db: &Db, round: db::Round) -> anyhow::Result<()> {
-    let nonce_tree = db.open_tree("nonce")?;
+pub async fn set_latest_expired_nonce(db: &SqlitePool, round: db::Round) -> anyhow::Result<()> {
+    let event_id = round.event_id.to_hex();
 
-    let value = serde_json::to_vec(&round.event_id)?;
-    nonce_tree.insert("latest_expired".as_bytes(), value)?;
+    query!(
+        "INSERT INTO latest_expired_nonce (id, nonce_event_id) VALUES (?1, ?2)
+            ON CONFLICT(id) DO UPDATE SET nonce_event_id = excluded.nonce_event_id;",
+        0,
+        event_id,
+    )
+    .execute(db)
+    .await?;
 
     Ok(())
 }
 
-pub fn get_latest_expired_nonce(db: &Db) -> anyhow::Result<Option<db::Round>> {
-    let nonce_tree = db.open_tree("nonce")?;
-    let latest_expired_nonce = nonce_tree.get("latest_expired".as_bytes())?;
-
-    let event_id: EventId = match latest_expired_nonce {
-        Some(event_id) => serde_json::from_slice(&event_id)?,
-        None => return Ok(None),
-    };
-
-    let round = nonce_tree
-        .get(event_id.as_bytes())?
-        .context("Could not find latest expired nonce")?;
-    let round = serde_json::from_slice(&round)?;
-
-    Ok(Some(round))
+pub async fn get_latest_expired_nonce(db: &SqlitePool) -> anyhow::Result<Option<db::Round>> {
+    sqlx::query_as!(
+        RoundRow,
+        r#"SELECT nonces.event_id, nonces.nonce FROM latest_expired_nonce
+            JOIN nonces ON nonces.event_id = latest_expired_nonce.nonce_event_id;"#
+    )
+    .try_map(Round::try_from)
+    .fetch_optional(db)
+    .await
+    .context("Failed to get active nonce")
 }
