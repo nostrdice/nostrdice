@@ -1,3 +1,4 @@
+use anyhow::Context;
 use lightning_invoice::Bolt11Invoice;
 use nostr::Event;
 use nostr::EventId;

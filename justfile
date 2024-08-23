@@ -148,3 +148,10 @@ nostrdice-post-multiplier multiplier threshold:
     stringlified=$(echo {{multiplier}} | sed 's/\./_/g')
 
     echo x$stringlified:$noteid >> {{MULTIPLIER_FILE}}
+
+
+db-prepare:
+     DATABASE_URL=sqlite:data/zaps.db?mode=rwc cargo sqlx prepare
+
+db-run-migration:
+     DATABASE_URL=sqlite:data/zaps.db?mode=rwc sqlx migrate run

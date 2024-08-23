@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO active_nonce (id, nonce_event_id) VALUES (?1, ?2)\n            ON CONFLICT(id) DO UPDATE SET nonce_event_id = excluded.nonce_event_id;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b61cbf74358561ef0928509dd283b62aca2ecb7cea8360598790b61bdf9a03bc"
+}

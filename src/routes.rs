@@ -139,8 +139,7 @@ pub async fn get_invoice_for_zap(
 /// The roller can verify the terms of the bet before sending the
 /// payment. To do this, they must:
 ///
-/// - Check that the `multiplier_note_id` corresponds to their chosen
-///   multiplier.
+/// - Check that the `multiplier_note_id` corresponds to their chosen multiplier.
 ///
 /// - Check that the `roller_npub` matches their own npub.
 ///

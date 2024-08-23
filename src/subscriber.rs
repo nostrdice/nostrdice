@@ -46,7 +46,7 @@ pub async fn start_invoice_subscription(
 async fn start_subscription(
     lnd: &mut LndLightningClient,
     sub: lnrpc::InvoiceSubscription,
-    db: &Db,
+    db: &SqlitePool,
     key: &Keys,
     client: &Client,
     multipliers: &Multipliers,

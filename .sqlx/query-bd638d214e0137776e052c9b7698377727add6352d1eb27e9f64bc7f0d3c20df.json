@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO latest_expired_nonce (id, nonce_event_id) VALUES (?1, ?2)\n            ON CONFLICT(id) DO UPDATE SET nonce_event_id = excluded.nonce_event_id;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "bd638d214e0137776e052c9b7698377727add6352d1eb27e9f64bc7f0d3c20df"
+}

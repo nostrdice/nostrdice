@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT nonces.event_id, nonces.nonce FROM active_nonce\n            JOIN nonces ON nonces.event_id = active_nonce.nonce_event_id;",
+  "describe": {
+    "columns": [
+      {
+        "name": "event_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "nonce",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0be04778950f8e401de98cc06a4ad3870abebc1bc8c0d8a57dc4506760d23d04"
+}

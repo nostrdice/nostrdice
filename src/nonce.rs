@@ -1,5 +1,7 @@
 use crate::db;
 use crate::db::Round;
+use crate::db::RoundRow;
+use anyhow::Context;
 use anyhow::Result;
 use nostr::bitcoin::hashes::sha256;
 use nostr::Tag;
@@ -41,8 +43,8 @@ struct Nonce {
 /// Steps:
 ///
 /// 1. Check if there was a previous active nonce i.e. a nonce that was not expired before the last
-///    restart. If so, expire it and reveal it, triggering relevant payouts. It's hard to know if there
-///    was any time left, so it's better to move on.
+///    restart. If so, expire it and reveal it, triggering relevant payouts. It's hard to know if
+///    there was any time left, so it's better to move on.
 ///
 /// 2. Check if there was a previous expired nonce i.e. a nonce that was expired but not revealed
 ///    before the last restart. If so, reveal it, triggering relevant payouts.
@@ -52,9 +54,9 @@ struct Nonce {
 ///
 /// 4. Wait until the active nonce expires.
 ///
-/// 5. After the active nonce expires, spawn a task to reveal the nonce after
-///    the scheduled delay. The delay allows for rollers who bet close to nonce expiry to have enough
-///    time to pay their invoice.
+/// 5. After the active nonce expires, spawn a task to reveal the nonce after the scheduled delay.
+///    The delay allows for rollers who bet close to nonce expiry to have enough time to pay their
+///    invoice.
 ///
 /// 6. Go back to step 3.
 ///
@@ -293,7 +295,7 @@ pub async fn get_active_nonce(db: &SqlitePool) -> Result<Option<Round>> {
 
 pub async fn set_active_nonce(db: &SqlitePool, round: Round) -> Result<()> {
     let event_id = round.event_id.to_hex();
-    let nonce = hex::encode(&round.nonce);
+    let nonce = hex::encode(round.nonce);
 
     query!(
         "INSERT INTO nonces (event_id, nonce) VALUES (?1, ?2);",

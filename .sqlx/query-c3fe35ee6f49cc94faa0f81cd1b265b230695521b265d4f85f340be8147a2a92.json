@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT event_id, nonce FROM nonces WHERE event_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "event_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "nonce",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "c3fe35ee6f49cc94faa0f81cd1b265b230695521b265d4f85f340be8147a2a92"
+}
