@@ -25,6 +25,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::from_reader;
 use serde_json::to_string;
+use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
 use std::fs::File;
 use std::io::BufReader;
@@ -32,7 +33,6 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
-use sqlx::sqlite::SqliteConnectOptions;
 use tokio::spawn;
 use tokio::sync::broadcast;
 use tonic_openssl_lnd::lnrpc::GetInfoRequest;
@@ -119,10 +119,10 @@ async fn main() -> anyhow::Result<()> {
     let db = SqlitePool::connect_with(
         SqliteConnectOptions::new()
             .filename(db_path)
-            .create_if_missing(true)
+            .create_if_missing(true),
     )
-        .await
-        .context("Failed to open database file")?;
+    .await
+    .context("Failed to open database file")?;
 
     sqlx::migrate!("./migrations").run(&db).await?;
 

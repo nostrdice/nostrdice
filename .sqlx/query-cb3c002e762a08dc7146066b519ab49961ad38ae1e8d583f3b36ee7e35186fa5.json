@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT nonces.event_id, nonces.nonce FROM latest_expired_nonce\n            JOIN nonces ON nonces.event_id = latest_expired_nonce.nonce_event_id;",
+  "describe": {
+    "columns": [
+      {
+        "name": "event_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "nonce",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "cb3c002e762a08dc7146066b519ab49961ad38ae1e8d583f3b36ee7e35186fa5"
+}

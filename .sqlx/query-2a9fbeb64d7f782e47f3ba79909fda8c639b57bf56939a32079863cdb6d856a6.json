@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO nonces (event_id, nonce) VALUES (?1, ?2);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "2a9fbeb64d7f782e47f3ba79909fda8c639b57bf56939a32079863cdb6d856a6"
+}

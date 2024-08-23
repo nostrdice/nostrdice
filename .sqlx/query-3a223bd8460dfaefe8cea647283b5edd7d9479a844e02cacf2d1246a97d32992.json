@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM active_nonce RETURNING nonce_event_id;",
+  "describe": {
+    "columns": [
+      {
+        "name": "nonce_event_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3a223bd8460dfaefe8cea647283b5edd7d9479a844e02cacf2d1246a97d32992"
+}

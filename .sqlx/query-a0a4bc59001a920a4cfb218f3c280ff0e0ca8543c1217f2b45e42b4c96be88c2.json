@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n            roller, invoice, request_event, multiplier_note_id,\n            nonce_commitment_note_id, bet_state, idx, bet_timestamp\n        FROM zaps WHERE payment_hash = ?1;",
+  "describe": {
+    "columns": [
+      {
+        "name": "roller",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "invoice",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "request_event",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "multiplier_note_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "nonce_commitment_note_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "bet_state",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "idx",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "bet_timestamp",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a0a4bc59001a920a4cfb218f3c280ff0e0ca8543c1217f2b45e42b4c96be88c2"
+}
