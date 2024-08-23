@@ -38,7 +38,10 @@ pub async fn start_invoice_subscription(
 
         let sub = lnrpc::InvoiceSubscription::default();
         if let Err(e) = start_subscription(&mut lnd, sub, &db, &key, &client, &multipliers).await {
-            tracing::error!("Invoice subscription died: {e:#}");
+            tracing::error!(
+                "Invoice subscription died, waiting 10 seconds before reconnecting: {e:#}"
+            );
+            tokio::time::sleep(Duration::from_secs(10)).await
         };
     }
 }
