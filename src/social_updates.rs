@@ -63,15 +63,19 @@ async fn post_social_inner(
 
     let losers = filter_zaps(&multipliers, &zaps, BetState::Loser);
 
-    let msg = format!("Winner winner, chicken dinner! Thank you to everyone who played in the last {} minutes. Out of {} participants, {} of you won some sweet sats. Congrats!", time_window_minutes, winners.len() + losers.len(), winners.len());
+    let msg = format!("Winner winner, chicken dinner! Thank you to everyone who played in the last {} minutes. Out of {} rolls, {} were winning rolls. Congrats!", time_window_minutes, winners.len() + losers.len(), winners.len());
     let closing_message = format!(
         "Do you have what it takes? Follow nostr:{} for another round and nostr:{} for the published nonces",
         game.to_bech32().expect("npub"), nonce.to_bech32().expect("npub")
     );
-    let winners = format_winners(winners);
-    let losers = format_losers(losers);
 
-    let msg = format!("{} \n {}\n{}\n{}", msg, winners, losers, closing_message);
+    let winners_string = format_winners(&winners);
+    let losers_string = format_losers(losers, winners);
+
+    let msg = format!(
+        "{} \n {}\n{}\n{}",
+        msg, winners_string, losers_string, closing_message
+    );
     let note_id = publish_note(&client, &keys, msg).await?;
     tracing::debug!("Published game summary: {note_id}",);
     Ok(())
@@ -104,7 +108,7 @@ fn filter_zaps(
         .collect::<Vec<_>>()
 }
 
-fn format_winners(winners: Vec<(PublicKey, Multiplier, u64)>) -> String {
+fn format_winners(winners: &Vec<(PublicKey, Multiplier, u64)>) -> String {
     if winners.is_empty() {
         return String::new();
     }
@@ -119,13 +123,32 @@ fn format_winners(winners: Vec<(PublicKey, Multiplier, u64)>) -> String {
     }
     message
 }
-fn format_losers(players: Vec<(PublicKey, Multiplier, u64)>) -> String {
+fn format_losers(
+    players: Vec<(PublicKey, Multiplier, u64)>,
+    winners: Vec<(PublicKey, Multiplier, u64)>,
+) -> String {
     if players.is_empty() {
         return String::new();
     }
-    let mut message = String::from("Losers - please try again:\n");
+    let winners = winners
+        .into_iter()
+        .map(|(key, _, _)| key)
+        .collect::<Vec<_>>();
+
+    let mut tmp_list = vec![];
+    let mut message = String::from("Player's that didn't win this time - please try again:\n");
     for (pubkey, _, _) in players {
+        // we don't want duplicates
+        if tmp_list.contains(&pubkey) {
+            continue;
+        }
+        // we don't want to post winners as losers
+        if winners.contains(&pubkey) {
+            continue;
+        }
+
         message.push_str(&format!("- nostr:{}\n", pubkey.to_bech32().expect("npub")));
+        tmp_list.push(pubkey);
     }
     message
 }
