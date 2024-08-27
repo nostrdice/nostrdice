@@ -131,7 +131,7 @@ pub async fn upsert_zap(
             bet_timestamp = excluded.bet_timestamp,
             multiplier = excluded.multiplier,
             zap_amount_msats = excluded.zap_amount_msats;
-        ;",
+        ",
         payment_hash,
         roller,
         invoice,
