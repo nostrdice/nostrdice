@@ -150,7 +150,7 @@ async fn handle_paid_invoice(
             // At this stage, this `Zap` indicates that the roller has placed their bet. We will
             // determine their outcome as soon as their nonce is revealed.
             zap.bet_state = BetState::ZapPaid;
-            upsert_zap(db, payment_hash, zap.clone()).await?;
+            upsert_zap(db, payment_hash, zap.clone(), &multipliers).await?;
 
             let client = ephermal_client(client, &mut zap).await?;
 

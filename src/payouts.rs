@@ -62,7 +62,7 @@ pub async fn roll_the_die(
             bet_state: BetState::Loser,
             ..zap.clone()
         };
-        upsert_zap(db, invoice.payment_hash().to_string(), zap).await?;
+        upsert_zap(db, invoice.payment_hash().to_string(), zap, &multipliers).await?;
 
         return Ok(());
     }
@@ -116,7 +116,7 @@ pub async fn roll_the_die(
         }
     };
 
-    upsert_zap(db, invoice.payment_hash().to_string(), zap).await?;
+    upsert_zap(db, invoice.payment_hash().to_string(), zap, &multipliers).await?;
     Ok(())
 }
 
