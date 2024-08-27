@@ -1,4 +1,18 @@
-# nostr-dice
+![Alt text](./banner.png?raw=true "Title")
+
+# NostrDice
+
+NostrDice is a provably fair betting game combining the power of Lightning and Nostr.
+
+All you have to do is zapping a note from [@NostrDice Game](https://nostrudel.ninja/#/u/npub1nstrdc6z4y9xadyj4z2zfecu6zt05uvlmd08ea0vchcvfrjvv7yq8lns84).
+Your winnings will automatically be sent back to the lightning address set in your profile.
+
+Note: ensure you have a valid Lightning Address in your profile, otherwise we can't zap you back.
+
+Follow for social updates: [@NostrDice](https://nostrudel.ninja/#/u/npub1nstrdc28zag3wcwwsc5t725t03h3hg9ard4vg425m4dvv7vqnmjsn076qj)
+Nonces: [@NostrDice Nonces](https://nostrudel.ninja/#/u/npub1nstrdc23h57te608p6rx90lhay86ny5lpm9jpnxquzv9fnvmpfhqnpzcwp)
+
+Game description can be found [here](./GAME.md)
 
 ## Test setup
 
