@@ -1,3 +1,4 @@
+use crate::db::get_failed_zaps;
 use crate::db::upsert_zap;
 use crate::db::BetState;
 use crate::db::Zap;
@@ -12,6 +13,12 @@ use nostr_sdk::hashes::Hash;
 use nostr_sdk::Client;
 use nostr_sdk::PublicKey;
 use sqlx::SqlitePool;
+use std::time::Duration;
+use tokio::select;
+use tokio::sync::broadcast;
+
+const RETRY_ZAP_INTERVAL: Duration = Duration::from_secs(60 * 60 * 6); // 6 hours
+const MAX_ZAP_RETRIES: i64 = 8; // Last retry will be 2 days later
 
 pub async fn roll_the_die(
     db: &SqlitePool,
@@ -29,7 +36,6 @@ pub async fn roll_the_die(
         ..
     } = zap;
     let roller_npub = roller.to_bech32().expect("npub");
-
     let roll = generate_roll(nonce, index, *roller, request.content.clone());
 
     let multiplier = match multipliers
@@ -79,6 +85,36 @@ pub async fn roll_the_die(
         "Roller is a winner! Aimed for <{threshold}, got {roll}"
     );
 
+    try_zap(db, &client, &multipliers, zap).await?;
+
+    Ok(())
+}
+
+async fn try_zap(
+    db: &SqlitePool,
+    client: &Client,
+    multipliers: &Multipliers,
+    zap: &Zap,
+) -> anyhow::Result<()> {
+    let Zap {
+        roller,
+        multiplier_note_id,
+        invoice,
+        ..
+    } = zap;
+    let roller_npub = roller.to_bech32().expect("npub");
+
+    let multiplier = match multipliers
+        .0
+        .iter()
+        .find(|note| &note.note_id == multiplier_note_id)
+    {
+        Some(note) => &note.multiplier,
+        None => {
+            bail!("Zap for unknown multiplier note ID. roller_npub={roller_npub}, zap={zap:?}");
+        }
+    };
+
     let zap_amount_msat = invoice
         .amount_milli_satoshis()
         .expect("amount to be present");
@@ -99,7 +135,7 @@ pub async fn roll_the_die(
         tracing::error!(%roller_npub, "Failed to zap. Error: {e:#}");
 
         send_dm(
-            &client,
+            client,
             roller,
             "Sorry, we failed to zap you your payout.".to_string(),
         )
@@ -116,7 +152,8 @@ pub async fn roll_the_die(
         }
     };
 
-    upsert_zap(db, invoice.payment_hash().to_string(), zap, &multipliers).await?;
+    upsert_zap(db, invoice.payment_hash().to_string(), zap, multipliers).await?;
+
     Ok(())
 }
 
@@ -164,6 +201,60 @@ fn generate_roll(nonce: [u8; 32], index: usize, roller_npub: PublicKey, memo: St
     let roll = roll.get(0..4).expect("long enough");
 
     u16::from_str_radix(roll, 16).expect("valid hex")
+}
+
+pub async fn retry_zaps(
+    db: SqlitePool,
+    client: Client,
+    multipliers: Multipliers,
+    mut ctrl_c: broadcast::Receiver<()>,
+) {
+    // Give other tasks a while to start up
+    select! {
+        _ = tokio::time::sleep(Duration::from_secs(30)) => (),
+        _ = ctrl_c.recv() => {
+            tracing::warn!("Got Ctrl+C; shutting down zap retry task...");
+            return;
+        },
+    }
+
+    loop {
+        tracing::info!("Retrying failed zaps...");
+
+        let failed = get_failed_zaps(&db, MAX_ZAP_RETRIES)
+            .await
+            .expect("Failed to get failed zaps");
+
+        for mut zap in failed {
+            if !ctrl_c.is_empty() {
+                tracing::warn!("Got Ctrl+C; shutting down zap retry task...");
+                break;
+            }
+
+            // There is a small chance of a race condition here - if we get the ctrl C after this
+            // point, we could theoretically zap them before inserting the updated zap into the
+            // database. Then, the next time the app is started, it would be zapped again.
+            // Since this retry only occurs every 6 hours, and the chance of failure should be
+            // small, it is recommended to simply not restart the application until
+            // "Retried all failed zaps" is seen in the logs.
+
+            zap.zap_retries += 1;
+            match try_zap(&db, &client, &multipliers, &zap).await {
+                Ok(_) => tracing::info!(?zap, "Successfully retried zap"),
+                Err(error) => tracing::error!(?zap, %error, "Failed to retry zap"),
+            }
+        }
+
+        tracing::info!("Retried all failed zaps.");
+
+        select! {
+            _ = tokio::time::sleep(RETRY_ZAP_INTERVAL) => (),
+            _ = ctrl_c.recv() => {
+                tracing::warn!("Got Ctrl+C; shutting down zap retry task...");
+                break;
+            },
+        }
+    }
 }
 
 #[cfg(test)]

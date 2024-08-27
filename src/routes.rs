@@ -252,6 +252,7 @@ pub(crate) async fn get_invoice_for_game_impl(
         multiplier_note_id: multiplier_note.note_id,
         nonce_commitment_note_id: round.event_id,
         bet_state: BetState::GameZapInvoiceRequested,
+        zap_retries: 0,
         index,
         bet_timestamp: OffsetDateTime::now_utc(),
     };
@@ -310,6 +311,7 @@ pub(crate) async fn get_invoice_for_zap_impl(
         multiplier_note_id: String::new(),
         nonce_commitment_note_id: EventId::all_zeros(),
         bet_state: BetState::ZapInvoiceRequested,
+        zap_retries: 0,
         index: 0,
         bet_timestamp: OffsetDateTime::now_utc(),
     };

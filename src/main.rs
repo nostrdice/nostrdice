@@ -3,6 +3,7 @@ use crate::multiplier::Multiplier;
 use crate::multiplier::MultiplierNote;
 use crate::multiplier::Multipliers;
 use crate::nonce::manage_nonces;
+use crate::payouts::retry_zaps;
 use crate::routes::*;
 use crate::social_updates::post_social_updates;
 use crate::subscriber::start_invoice_subscription;
@@ -297,10 +298,17 @@ async fn main() -> anyhow::Result<()> {
         client.clone(),
         social_keys.clone(),
         state.db.clone(),
-        multipliers,
+        multipliers.clone(),
         main_keys.public_key(),
         nonce_keys.public_key(),
         config.social_updates_time_window_minutes,
+    ));
+
+    spawn(retry_zaps(
+        state.db.clone(),
+        client.clone(),
+        multipliers.clone(),
+        ctrl_c_tx.subscribe(),
     ));
 
     let graceful = server.with_graceful_shutdown(async {
