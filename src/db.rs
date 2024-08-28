@@ -1,3 +1,4 @@
+use crate::multiplier::Multipliers;
 use anyhow::Context;
 use lightning_invoice::Bolt11Invoice;
 use nostr::Event;
@@ -86,23 +87,39 @@ impl TryFrom<ZapRow> for Zap {
     }
 }
 
-pub async fn upsert_zap(db: &SqlitePool, payment_hash: String, zap: Zap) -> anyhow::Result<()> {
+pub async fn upsert_zap(
+    db: &SqlitePool,
+    payment_hash: String,
+    zap: Zap,
+    multipliers: &Multipliers,
+) -> anyhow::Result<()> {
     // TODO: This does not scale with lots of zaps.
 
     let roller = zap.roller.to_hex();
     let invoice = zap.invoice.to_string();
     let request = serde_json::to_string(&zap.request)?;
-    let multiplier_id = zap.multiplier_note_id;
     let commitment_id = zap.nonce_commitment_note_id.to_hex();
     let bet_state = serde_json::to_string(&zap.bet_state)?;
     let idx = zap.index as i64;
     let ts = zap.bet_timestamp;
+    let multiplier = multipliers
+        .get_multiplier_note(&zap.multiplier_note_id)
+        .context("Failed to get multiplier note for id")?
+        .multiplier;
+    let multiplier = serde_json::to_string(&multiplier)?;
+    let multiplier_id = zap.multiplier_note_id;
+    let zap_amount_msats: i64 = zap
+        .invoice
+        .amount_milli_satoshis()
+        .context("Failed to get zap amount")?
+        .try_into()
+        .context("Zap amount too large!")?;
 
     query!(
         "INSERT INTO zaps
             (payment_hash, roller, invoice, request_event, multiplier_note_id,
-             nonce_commitment_note_id, bet_state, idx, bet_timestamp)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             nonce_commitment_note_id, bet_state, idx, bet_timestamp, multiplier, zap_amount_msats)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT(payment_hash) DO UPDATE SET
             roller = excluded.roller,
             invoice = excluded.invoice,
@@ -111,8 +128,10 @@ pub async fn upsert_zap(db: &SqlitePool, payment_hash: String, zap: Zap) -> anyh
             nonce_commitment_note_id = excluded.nonce_commitment_note_id,
             bet_state = excluded.bet_state,
             idx = excluded.idx,
-            bet_timestamp = excluded.bet_timestamp;
-        ;",
+            bet_timestamp = excluded.bet_timestamp,
+            multiplier = excluded.multiplier,
+            zap_amount_msats = excluded.zap_amount_msats;
+        ",
         payment_hash,
         roller,
         invoice,
@@ -122,6 +141,8 @@ pub async fn upsert_zap(db: &SqlitePool, payment_hash: String, zap: Zap) -> anyh
         bet_state,
         idx,
         ts,
+        multiplier,
+        zap_amount_msats
     )
     .execute(db)
     .await
