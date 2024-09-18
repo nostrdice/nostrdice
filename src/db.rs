@@ -22,6 +22,7 @@ pub struct Zap {
     pub multiplier_note_id: String,
     pub nonce_commitment_note_id: EventId,
     pub bet_state: BetState,
+    pub zap_retries: u64,
     pub index: usize,
     /// Timestamp when the user place his bet
     pub bet_timestamp: OffsetDateTime,
@@ -46,6 +47,7 @@ struct ZapRow {
     nonce_commitment_note_id: String,
     bet_state: String,
     idx: i64,
+    zap_retries: i64,
     bet_timestamp: OffsetDateTime,
 }
 
@@ -81,6 +83,13 @@ impl TryFrom<ZapRow> for Zap {
                     source: e.into(),
                 }
             })?,
+            zap_retries: row
+                .zap_retries
+                .try_into()
+                .map_err(|e| sqlx::Error::ColumnDecode {
+                    index: "zap_retries".to_owned(),
+                    source: Box::new(e),
+                })?,
             index: row.idx as usize,
             bet_timestamp: row.bet_timestamp,
         })
@@ -114,12 +123,14 @@ pub async fn upsert_zap(
         .context("Failed to get zap amount")?
         .try_into()
         .context("Zap amount too large!")?;
+    let zap_retries = zap.zap_retries as i64;
 
     query!(
         "INSERT INTO zaps
             (payment_hash, roller, invoice, request_event, multiplier_note_id,
-             nonce_commitment_note_id, bet_state, idx, bet_timestamp, multiplier, zap_amount_msats)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             nonce_commitment_note_id, bet_state, idx, bet_timestamp, multiplier, zap_amount_msats,
+             zap_retries)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT(payment_hash) DO UPDATE SET
             roller = excluded.roller,
             invoice = excluded.invoice,
@@ -130,7 +141,8 @@ pub async fn upsert_zap(
             idx = excluded.idx,
             bet_timestamp = excluded.bet_timestamp,
             multiplier = excluded.multiplier,
-            zap_amount_msats = excluded.zap_amount_msats;
+            zap_amount_msats = excluded.zap_amount_msats,
+            zap_retries = excluded.zap_retries;
         ",
         payment_hash,
         roller,
@@ -142,7 +154,8 @@ pub async fn upsert_zap(
         idx,
         ts,
         multiplier,
-        zap_amount_msats
+        zap_amount_msats,
+        zap_retries,
     )
     .execute(db)
     .await
@@ -156,7 +169,7 @@ pub async fn get_zaps_by_event_id(db: &SqlitePool, event_id: EventId) -> anyhow:
         ZapRow,
         "SELECT
             roller, invoice, request_event, multiplier_note_id,
-            nonce_commitment_note_id, bet_state, idx, bet_timestamp
+            nonce_commitment_note_id, bet_state, idx, bet_timestamp, zap_retries
         FROM zaps WHERE nonce_commitment_note_id = ?1;",
         event_id,
     )
@@ -171,7 +184,7 @@ pub async fn get_zap(db: &SqlitePool, payment_hash: String) -> anyhow::Result<Op
         ZapRow,
         "SELECT
             roller, invoice, request_event, multiplier_note_id,
-            nonce_commitment_note_id, bet_state, idx, bet_timestamp
+            nonce_commitment_note_id, bet_state, idx, bet_timestamp, zap_retries
         FROM zaps WHERE payment_hash = ?1;",
         payment_hash,
     )
@@ -191,10 +204,27 @@ pub async fn get_zaps_in_time_window(
         ZapRow,
         "SELECT
             roller, invoice, request_event, multiplier_note_id,
-            nonce_commitment_note_id, bet_state, idx, bet_timestamp
+            nonce_commitment_note_id, bet_state, idx, bet_timestamp, zap_retries
         FROM zaps WHERE bet_timestamp > ?1 AND bet_timestamp < ?2;",
         start_time,
         end_time,
+    )
+    .try_map(Zap::try_from)
+    .fetch_all(db)
+    .await
+    .context("Failed to fetch zaps")
+}
+
+pub async fn get_failed_zaps(db: &SqlitePool, max_retries: i64) -> anyhow::Result<Vec<Zap>> {
+    let bet_state = serde_json::to_string(&BetState::ZapFailed)?;
+    query_as!(
+        ZapRow,
+        "SELECT
+            roller, invoice, request_event, multiplier_note_id,
+            nonce_commitment_note_id, bet_state, idx, bet_timestamp, zap_retries
+        FROM zaps WHERE bet_state = ?1 AND zap_retries < ?2;",
+        bet_state,
+        max_retries,
     )
     .try_map(Zap::try_from)
     .fetch_all(db)
