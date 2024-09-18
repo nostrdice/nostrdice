@@ -36,8 +36,14 @@ jobs:
           username: ${{ github.repository }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup sqlx
+        run: |
+          cargo install sqlx-cli --locked
+          DATABASE_URL=sqlite:zaps.db sqlx db create
+          DATABASE_URL=sqlite:zaps.db sqlx migrate run
+
       - name: Build binary
-        run: cargo build --release
+        run: DATABASE_URL=sqlite:zaps.db cargo build --release
 
       - name: Build Docker image
         run: |
