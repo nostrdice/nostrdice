@@ -29,6 +29,7 @@ use serde_json::to_string;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
 use std::fs::File;
+use std::future::IntoFuture;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
@@ -245,20 +246,21 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Webserver running on http://{}", addr);
 
     let server_router = Router::new()
-        .route("/get-invoice-for-game/:hash", get(get_invoice_for_game))
-        .route("/get-invoice-for-zap/:hash", get(get_invoice_for_zap))
-        .route("/.well-known/lnurlp/:name", get(get_lnurl_pay))
+        .route("/get-invoice-for-game/{hash}", get(get_invoice_for_game))
+        .route("/get-invoice-for-zap/{hash}", get(get_invoice_for_zap))
+        .route("/.well-known/lnurlp/{name}", get(get_lnurl_pay))
         .route("/.well-known/nostr.json", get(get_nip05))
         .fallback(fallback)
         .layer(Extension(state.clone()))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
-                .allow_headers(vec![http::header::CONTENT_TYPE])
+                .allow_headers([http::header::CONTENT_TYPE])
                 .allow_methods([Method::GET, Method::POST]),
         );
 
-    let server = axum::Server::bind(&addr).serve(server_router.into_make_service());
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let server = axum::serve(listener, server_router.into_make_service());
 
     let (ctrl_c_tx, mut ctrl_c_rx) = {
         let (tx, rx) = broadcast::channel(1);
@@ -311,9 +313,11 @@ async fn main() -> anyhow::Result<()> {
         ctrl_c_tx.subscribe(),
     ));
 
-    let graceful = server.with_graceful_shutdown(async {
-        let _ = ctrl_c_rx.recv().await;
-    });
+    let graceful = server
+        .with_graceful_shutdown(async move {
+            let _ = ctrl_c_rx.recv().await;
+        })
+        .into_future();
 
     // Await the server to receive the shutdown signal
 
