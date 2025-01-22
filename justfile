@@ -149,6 +149,8 @@ nostrdice-post-multiplier multiplier threshold:
 
     echo x$stringlified:$noteid >> {{MULTIPLIER_FILE}}
 
+db-create:
+    DATABASE_URL=sqlite:data/zaps.db?mode=rwc sqlx database create
 
 db-prepare:
      DATABASE_URL=sqlite:data/zaps.db?mode=rwc cargo sqlx prepare
