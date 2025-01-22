@@ -1,5 +1,5 @@
 use crate::db;
-use crate::db::upsert_zap;
+use crate::db::insert_zap;
 use crate::db::BetState;
 use crate::db::Zap;
 use crate::multiplier::MultiplierNote;
@@ -259,7 +259,7 @@ pub(crate) async fn get_invoice_for_game_impl(
 
     // At this stage, this `Zap` indicates the roller's _intention_ to bet. They have until the zap
     // invoice's expiry to complete the bet.
-    upsert_zap(&state.db, hex::encode(resp.r_hash), zap, &state.multipliers).await?;
+    insert_zap(&state.db, hex::encode(resp.r_hash), zap, &state.multipliers).await?;
 
     Ok(resp.payment_request)
 }
@@ -317,7 +317,7 @@ pub(crate) async fn get_invoice_for_zap_impl(
     };
 
     // invoice's expiry to complete the bet.
-    upsert_zap(&state.db, hex::encode(resp.r_hash), zap, &state.multipliers).await?;
+    insert_zap(&state.db, hex::encode(resp.r_hash), zap, &state.multipliers).await?;
 
     Ok(resp.payment_request)
 }

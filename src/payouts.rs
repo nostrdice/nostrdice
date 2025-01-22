@@ -1,5 +1,5 @@
 use crate::db::get_failed_zaps;
-use crate::db::upsert_zap;
+use crate::db::update_bet_state;
 use crate::db::BetState;
 use crate::db::Zap;
 use crate::multiplier::Multipliers;
@@ -64,11 +64,7 @@ pub async fn roll_the_die(
         )
         .await;
 
-        let zap = Zap {
-            bet_state: BetState::Loser,
-            ..zap.clone()
-        };
-        upsert_zap(db, invoice.payment_hash().to_string(), zap, &multipliers).await?;
+        update_bet_state(db, invoice.payment_hash().to_string(), BetState::Loser).await?;
 
         return Ok(());
     }
@@ -131,7 +127,7 @@ async fn try_zap(
     let zap_details = ZapDetails::new(ZapType::Public)
         .message(format!("Won a {}x bet on NostrDice!", multiplier.get_multiplier()).to_string());
 
-    let zap = if let Err(e) = client.zap(zap.roller, amount_sat, Some(zap_details)).await {
+    let zap_state = if let Err(e) = client.zap(zap.roller, amount_sat, Some(zap_details)).await {
         tracing::error!(%roller_npub, "Failed to zap. Error: {e:#}");
 
         send_dm(
@@ -141,18 +137,12 @@ async fn try_zap(
         )
         .await;
 
-        Zap {
-            bet_state: BetState::ZapFailed,
-            ..zap.clone()
-        }
+        BetState::ZapFailed
     } else {
-        Zap {
-            bet_state: BetState::PaidWinner,
-            ..zap.clone()
-        }
+        BetState::PaidWinner
     };
 
-    upsert_zap(db, invoice.payment_hash().to_string(), zap, multipliers).await?;
+    update_bet_state(db, invoice.payment_hash().to_string(), zap_state).await?;
 
     Ok(())
 }
