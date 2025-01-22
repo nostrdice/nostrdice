@@ -1,3 +1,5 @@
+set dotenv-load
+
 # Path of the MULTIPLIER_FILE
 MULTIPLIER_FILE := "./data/multipliers.yml"
 
@@ -149,9 +151,11 @@ nostrdice-post-multiplier multiplier threshold:
 
     echo x$stringlified:$noteid >> {{MULTIPLIER_FILE}}
 
+db-create:
+    sqlx database create
 
 db-prepare:
-     DATABASE_URL=sqlite:data/zaps.db?mode=rwc cargo sqlx prepare
+    cargo sqlx prepare
 
 db-run-migration:
-     DATABASE_URL=sqlite:data/zaps.db?mode=rwc sqlx migrate run
+    sqlx migrate run

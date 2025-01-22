@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO zaps\n            (payment_hash, roller, invoice, request_event, multiplier_note_id,\n             nonce_commitment_note_id, bet_state, idx, bet_timestamp, multiplier, zap_amount_msats,\n             zap_retries)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "598238cbdb52c1975134c646d3a354b0403c4407bc69bd9d833c5205cafd2755"
+}

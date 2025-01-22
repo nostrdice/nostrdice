@@ -1,5 +1,5 @@
 use crate::db::get_zap;
-use crate::db::upsert_zap;
+use crate::db::update_bet_state;
 use crate::db::BetState;
 use crate::db::Zap;
 use crate::multiplier::Multipliers;
@@ -150,7 +150,7 @@ async fn handle_paid_invoice(
             // At this stage, this `Zap` indicates that the roller has placed their bet. We will
             // determine their outcome as soon as their nonce is revealed.
             zap.bet_state = BetState::ZapPaid;
-            upsert_zap(db, payment_hash, zap.clone(), &multipliers).await?;
+            update_bet_state(db, payment_hash, BetState::ZapPaid).await?;
 
             let client = ephermal_client(client, &mut zap).await?;
 

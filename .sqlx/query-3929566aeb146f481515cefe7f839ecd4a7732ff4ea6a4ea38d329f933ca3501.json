@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT\n            roller, invoice, request_event, multiplier_note_id,\n            nonce_commitment_note_id, bet_state, idx, bet_timestamp\n        FROM zaps WHERE nonce_commitment_note_id = ?1;",
+  "query": "SELECT\n            roller, invoice, request_event, multiplier_note_id,\n            nonce_commitment_note_id, bet_state, idx, bet_timestamp, zap_retries\n        FROM zaps WHERE payment_hash = ?1;",
   "describe": {
     "columns": [
       {
@@ -42,6 +42,11 @@
         "name": "bet_timestamp",
         "ordinal": 7,
         "type_info": "Datetime"
+      },
+      {
+        "name": "zap_retries",
+        "ordinal": 8,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -55,8 +60,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "9724f5700673600d43eadf64dd4a0942957058b65ab15851b4e030481509b20f"
+  "hash": "3929566aeb146f481515cefe7f839ecd4a7732ff4ea6a4ea38d329f933ca3501"
 }

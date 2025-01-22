@@ -96,7 +96,7 @@ impl TryFrom<ZapRow> for Zap {
     }
 }
 
-pub async fn upsert_zap(
+pub async fn insert_zap(
     db: &SqlitePool,
     payment_hash: String,
     zap: Zap,
@@ -131,18 +131,6 @@ pub async fn upsert_zap(
              nonce_commitment_note_id, bet_state, idx, bet_timestamp, multiplier, zap_amount_msats,
              zap_retries)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT(payment_hash) DO UPDATE SET
-            roller = excluded.roller,
-            invoice = excluded.invoice,
-            request_event = excluded.request_event,
-            multiplier_note_id = excluded.multiplier_note_id,
-            nonce_commitment_note_id = excluded.nonce_commitment_note_id,
-            bet_state = excluded.bet_state,
-            idx = excluded.idx,
-            bet_timestamp = excluded.bet_timestamp,
-            multiplier = excluded.multiplier,
-            zap_amount_msats = excluded.zap_amount_msats,
-            zap_retries = excluded.zap_retries;
         ",
         payment_hash,
         roller,
@@ -156,6 +144,25 @@ pub async fn upsert_zap(
         multiplier,
         zap_amount_msats,
         zap_retries,
+    )
+    .execute(db)
+    .await
+    .map(|_| ())
+    .context("Failed to upsert zap")
+}
+
+pub async fn update_bet_state(
+    db: &SqlitePool,
+    payment_hash: String,
+    new_bet_state: BetState,
+) -> anyhow::Result<()> {
+    let bet_state = serde_json::to_string(&new_bet_state)?;
+    query!(
+        "UPDATE zaps 
+            SET bet_state = $1 
+            WHERE payment_hash = $2",
+        bet_state,
+        payment_hash,
     )
     .execute(db)
     .await

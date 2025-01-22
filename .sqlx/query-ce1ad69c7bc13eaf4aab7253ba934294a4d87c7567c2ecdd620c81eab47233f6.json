@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE zaps \n            SET bet_state = $1 \n            WHERE payment_hash = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "ce1ad69c7bc13eaf4aab7253ba934294a4d87c7567c2ecdd620c81eab47233f6"
+}
